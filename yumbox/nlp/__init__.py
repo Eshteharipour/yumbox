@@ -126,7 +126,7 @@ class Preprocessor:
             self.fa_stopwords = set(hazm.stopwords_list())
             # TODO: calculated_stop_words
         if self.remove_en_stopwords:
-            self.en_stopwords = set(stopwords.words("en"))
+            self.en_stopwords = set(stopwords.words("english"))
             # self.en_stopwords = [s for s in self.en_stopwords if len(s) > 2]
             # TODO: custom_en_stop_words
 
@@ -189,13 +189,13 @@ class Preprocessor:
         """Keep words longer and shorter than [a, b] chars"""
         return [t for t in tokens if (len(t) >= low) and len(t) <= high]
 
-    def uri_remover(s: str):
+    def uri_remover(self, s: str):
         return re.sub("( )?http(s)?://[^\s]+( )?", " ", s).strip()
 
-    def www_remover(s: str):
+    def www_remover(self, s: str):
         return re.sub("( )?www\.[^\s]+\.[^\s]( )?", " ", s).strip()
 
-    def group_annots_splitter(s: str):
+    def group_annots_splitter(self, s: str):
         return re.sub("/|,", " ", s).strip()
 
     def __call__(self, s: str, keep_lf=False) -> str:
@@ -237,7 +237,9 @@ class Preprocessor:
             s = "".join([c for c in s if c not in string.punctuation])
 
         if self.ok_unicode_ranges:
-            ur_regex = UnicodeRanges.regex_from_range(self.ok_unicode_ranges)
+            ur_regex = UnicodeRanges.regex_from_range(
+                self.ok_unicode_ranges, negate=True
+            )
             s = re.sub(ur_regex, "", s)
 
         if self.remove_parentheticals:
@@ -448,12 +450,15 @@ class UnicodeRanges:
     ]
 
     @classmethod
-    def regex_from_range(self, ranges: list[tuple[int, int]]):
-        hex_to_unicode = lambda x: rf"\u{format(x, '0X')}"
+    def regex_from_range(self, ranges: list[tuple[int, int]], negate=False):
+        hex_to_unicode = lambda x: rf"\u{format(x, '04X')}"
         ranges = [(hex_to_unicode(s), hex_to_unicode(e)) for s, e in ranges]
         ranges = [f"{s}-{e}" for s, e in ranges]
         ranges = "".join(ranges)
-        pattern = rf"[{ranges}]"
+        if negate == False:
+            pattern = rf"[{ranges}]"
+        else:
+            pattern = rf"[^ {ranges}]"  # Added space
         return re.compile(pattern)
 
     @classmethod

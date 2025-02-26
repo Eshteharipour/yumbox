@@ -2,6 +2,7 @@ import functools
 import os
 import pickle
 from time import sleep
+from typing import Callable, Optional
 
 import faiss
 import numpy as np
@@ -187,7 +188,7 @@ def coalesce(*args):
     return next((x for x in args if x is not None))
 
 
-def retry(max_tries: 5, wait: 3, validator: None | callable = None):
+def retry(max_tries=5, wait=3, validator: Optional[Callable] = None):
     """Args max_tries and wait defined as class attributes have higher precedence."""
 
     def decorator(func):

@@ -1,3 +1,5 @@
+from typing import Callable, Optional
+
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -11,7 +13,7 @@ class ImgDataset(Dataset):
         path_col: str,
         hash_col: str,
         features: dict[str, np.ndarray],
-        transform: callable,
+        transform: Optional[Callable],
     ):
         self.transform = transform
 
@@ -42,8 +44,8 @@ class TextDataset(Dataset):
         df: pd.DataFrame,
         name_col: str,
         features: dict[str, np.ndarray],
-        preprocessor: callable,
-        tokenizer: callable,
+        preprocessor: Optional[Callable],
+        tokenizer: Optional[Callable],
     ):
         self.preprocessor = preprocessor
         self.tokenizer = tokenizer
