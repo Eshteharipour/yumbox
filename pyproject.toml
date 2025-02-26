@@ -9,7 +9,7 @@ authors = [{ name = "Shayan", email = "ShayanEshtehariPour@gmail.com" }]
 dependencies = [
     "numpy",
     "torch",
-    "faiss",
+    "faiss-cpu",
     "hazm",
     "nltk",
     "unicodeblock",
