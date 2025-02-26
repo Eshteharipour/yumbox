@@ -1,0 +1,38 @@
+[project]
+name = "ml-box"
+version = "0.0.1"
+description = "Tools and utilities for fast prototyping of machine learning ideas!"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Shayan", email = "ShayanEshtehariPour@gmail.com" }]
+dependencies = [
+    "numpy",
+    "torch",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "flake8>=4.0", "black>=23.0", "mypy>=0.990"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+include = ["yumbox"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--strict-markers"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
