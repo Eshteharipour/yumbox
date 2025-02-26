@@ -1,5 +1,5 @@
 [project]
-name = "ml-box"
+name = "yumbox"
 version = "0.0.1"
 description = "Tools and utilities for fast prototyping of machine learning ideas!"
 readme = "README.md"
