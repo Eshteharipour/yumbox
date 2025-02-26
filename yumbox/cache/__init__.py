@@ -247,34 +247,3 @@ def last_offset(func):
         return result
 
     return wrapper
-
-
-def last_offset_cls(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        cache_dir = BFG["cache_dir"]
-        logger = BFG["logger"]
-
-        func_name = func.__name__ + "_" + last_offset.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".txt"
-
-        if cache_dir and os.path.isfile(cache_file):
-            logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            with open(cache_file, "r") as fd:
-                offset = fd.readline().strip()
-        else:
-            offset = None
-
-        result = func(*args, **kwargs, offset=offset)
-        offset = result["offset"]
-        if cache_dir:
-            logger.info(f"Saving cache for {func_name} to {cache_dir}")
-            with open(cache_file, "w") as fd:
-                fd.write(offset)
-            logger.info(f"Saved cache!")
-        return result
-
-    return wrapper

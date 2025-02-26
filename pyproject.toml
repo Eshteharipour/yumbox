@@ -9,6 +9,14 @@ authors = [{ name = "Shayan", email = "ShayanEshtehariPour@gmail.com" }]
 dependencies = [
     "numpy",
     "torch",
+    "faiss",
+    "hazm",
+    "nltk",
+    "unicodeblock",
+    "lxml",
+    "parsel",
+    "tqdm",
+    "pillow"
 ]
 
 [project.optional-dependencies]
