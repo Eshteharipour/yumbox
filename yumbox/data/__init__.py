@@ -42,7 +42,8 @@ class TextDataset(Dataset):
     def __init__(
         self,
         df: pd.DataFrame,
-        name_col: str,
+        text_col: str,
+        id_col: str,
         features: dict[str, np.ndarray],
         preprocessor: Optional[Callable],
         tokenizer: Optional[Callable],
@@ -50,19 +51,19 @@ class TextDataset(Dataset):
         self.preprocessor = preprocessor
         self.tokenizer = tokenizer
 
-        df_wnames = df[df[name_col].astype(bool)]
-        df_wnames = df_wnames[name_col]
+        id2text = dict(zip(df[id_col], df[text_col]))
+        id2text = {k: v for k, v in id2text.items() if k and pd.notna(k)}
 
-        missing_keys = set(df_wnames.values).difference(set(features.keys()))
-        self.data = list(missing_keys)
+        missing_keys = set(id2text.keys()).difference(set(features.keys()))
+        self.data = [(k, id2text[k]) for k in missing_keys]
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
-        name = self.data[index]
-        tok = self.preprocessor(name)
+        idx, text = self.data[index]
+        tok = self.preprocessor(text)
         tok = self.tokenizer(tok)
         if not isinstance(tok, str):
             tok = tok.squeeze()
-        return name, tok
+        return idx, tok

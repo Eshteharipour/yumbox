@@ -1,11 +1,11 @@
 [project]
 name = "yumbox"
-version = "0.0.1"
+version = "0.0.2"
 description = "Tools and utilities for fast prototyping of machine learning ideas!"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-authors = [{ name = "Shayan", email = "ShayanEshtehariPour@gmail.com" }]
+authors = [{ name = "Shayan", email = "shayaneshteharipour@gmail.com" }]
 dependencies = [
     "numpy",
     "torch",
@@ -16,7 +16,7 @@ dependencies = [
     "lxml",
     "parsel",
     "tqdm",
-    "pillow"
+    "pillow",
 ]
 
 [project.optional-dependencies]
