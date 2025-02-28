@@ -1,8 +1,9 @@
 import functools
 import os
 import pickle
+from collections.abc import Callable
 from time import sleep
-from typing import Callable, Optional
+from typing import Optional
 
 import faiss
 import numpy as np
@@ -198,6 +199,8 @@ def retry(max_tries=5, wait=3, validator: Optional[Callable] = None):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            logger = BFG["logger"]
+
             self = args[0] if len(args) else None
             tries = coalesce(getattr(self, "max_tries", None), max_tries)
             delay = coalesce(getattr(self, "wait", None), wait)
@@ -212,11 +215,17 @@ def retry(max_tries=5, wait=3, validator: Optional[Callable] = None):
                     break
                 except Error400 as e:
                     exception = e
+                    logger.error(f"Exception {e} occured.")
                     break
                 except Exception as e:
                     exception = e
                     if retry + 1 < tries:
-                        print(f"Exception {e} occured, retrying {retry+1}/{tries}")
+                        import traceback
+
+                        logger.warning(
+                            f"Exception {e} occured, retrying {retry+1}/{tries}"
+                        )
+                        traceback.print_exc()
                         sleep(delay)
                     continue
             if success == True:
