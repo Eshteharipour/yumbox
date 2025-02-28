@@ -38,6 +38,9 @@ class ImgDataset(Dataset):
         return hash, img
 
 
+no_tokenizer = lambda x: x
+
+
 class TextDataset(Dataset):
     def __init__(
         self,
@@ -46,7 +49,7 @@ class TextDataset(Dataset):
         id_col: str,
         features: dict[str, np.ndarray],
         preprocessor: Optional[Callable],
-        tokenizer: Optional[Callable],
+        tokenizer: Optional[Callable] = no_tokenizer,
     ):
         self.preprocessor = preprocessor
         self.tokenizer = tokenizer
@@ -67,3 +70,63 @@ class TextDataset(Dataset):
         if not isinstance(tok, str):
             tok = tok.squeeze()
         return idx, tok
+
+
+def split_token_ids(ids, chunk_size, overlap):
+    start = 0
+    while start < len(ids):
+        end = min(start + chunk_size, len(ids))
+        chunk = ids[start:end]
+        yield chunk
+        start = end - overlap if end != len(ids) else len(ids)
+
+
+class TFDocumentDataset(Dataset):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        text_col: str,
+        id_col: str,
+        features: dict[str, np.ndarray],
+        preprocessor: Optional[Callable],
+        tokenizer: Optional[Callable],
+        max_seq_length: int,
+        overlap: int,
+    ):
+        self.preprocessor = preprocessor
+        self.tokenizer = tokenizer
+        self.max_seq_length = max_seq_length
+        self.overlap = overlap
+
+        assert hasattr(self.tokenizer, "encode"), "BertTokenizerFast expected"
+        assert hasattr(self.tokenizer, "decode"), "BertTokenizerFast expected"
+
+        id2text = dict(zip(df[id_col], df[text_col]))
+        id2text = {k: v for k, v in id2text.items() if k and pd.notna(k)}
+
+        missing_keys = set(id2text.keys()).difference(set(features.keys()))
+        self.data = [(k, id2text[k]) for k in missing_keys]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        idx, text = self.data[index]
+        prep = self.preprocessor(text)
+        tok = self.tokenizer.encode(prep, truncation=False)
+        if len(tok) > self.max_seq_length + self.overlap:
+            token_chunks = split_token_ids(
+                tok, chunk_size=self.max_seq_length, overlap=self.overlap
+            )
+            text_chunks = []
+            for i, chunk in enumerate(token_chunks):
+                chunk_text = self.tokenizer.decode(
+                    chunk,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=True,
+                )
+                text_chunks.append(chunk_text)
+        else:
+            text_chunks = [prep]
+
+        return idx, text_chunks

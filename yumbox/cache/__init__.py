@@ -234,7 +234,7 @@ def last_offset(func):
         func_kwargs = " ".join(func_kwargs)
         cache_file = ""
         if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
+            cache_file = os.path.join(cache_dir, func_name + "_" + func_kwargs)
             cache_file += ".pkl"
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -253,8 +253,12 @@ def last_offset(func):
             logger.info(f"Loading offset for {func_name} from {offset_cache_dir}")
             with open(offset_cache_file, "r") as fd:
                 offset = fd.readline().strip()
+                try:
+                    offset = int(offset)
+                except ValueError:
+                    offset = 0
         else:
-            offset = None
+            offset = 0
 
         if output:
             output, offset = func(*args, **kwargs, offset=offset, cached_output=output)
@@ -264,7 +268,7 @@ def last_offset(func):
         if offset_cache_dir:
             logger.info(f"Saving offset for {func_name} to {offset_cache_dir}")
             with open(offset_cache_file, "w") as fd:
-                fd.write(offset)
+                fd.write(str(offset))
             logger.info(f"Saved offset!")
 
         if cache_dir:
