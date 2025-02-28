@@ -188,6 +188,10 @@ def coalesce(*args):
     return next((x for x in args if x is not None))
 
 
+class Error400(Exception):
+    pass
+
+
 def retry(max_tries=5, wait=3, validator: Optional[Callable] = None):
     """Args max_tries and wait defined as class attributes have higher precedence."""
 
@@ -198,13 +202,19 @@ def retry(max_tries=5, wait=3, validator: Optional[Callable] = None):
             tries = coalesce(getattr(self, "max_tries", None), max_tries)
             delay = coalesce(getattr(self, "wait", None), wait)
             success = False
+            exception = None
             for retry in range(0, tries):
                 try:
                     response = func(*args, **kwargs)
                     if validator:
                         validator(*args, **kwargs, response=response)
                     success = True
+                    break
+                except Error400 as e:
+                    exception = e
+                    break
                 except Exception as e:
+                    exception = e
                     if retry + 1 < tries:
                         print(f"Exception {e} occured, retrying {retry+1}/{tries}")
                         sleep(delay)
@@ -212,7 +222,7 @@ def retry(max_tries=5, wait=3, validator: Optional[Callable] = None):
             if success == True:
                 return response
             else:
-                return {"status": "error", "error": {"message": str(e)}}
+                return {"status": "error", "error": {"message": str(exception)}}
 
         return wrapper
 

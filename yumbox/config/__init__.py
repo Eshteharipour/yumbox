@@ -1,4 +1,7 @@
 import logging
+import os
+import sys
+from datetime import datetime
 from typing import Literal
 
 
@@ -16,3 +19,36 @@ class CFGClass:
 
 
 BFG = CFGClass()
+
+
+_streams = {"stdout": sys.stdout}
+
+
+def setup_logger(name, level=logging.INFO, path="", stream="stdout"):
+    logger = logging.getLogger(name)
+    if logger.hasHandlers():
+        return logger
+    global _streams
+    if stream not in _streams:
+        log_folder = os.path.dirname(stream)
+        os.makedirs(log_folder, exist_ok=True)
+        _streams[stream] = open(stream, "w")
+    logger.propagate = False
+    logger.setLevel(level)
+
+    sh = logging.StreamHandler(stream=_streams[stream])
+    sh.setLevel(level)
+    formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s")
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
+
+    # File logging
+    if path:
+        os.makedirs(path, exist_ok=True)
+        date_time = datetime.now().isoformat()
+        logfile = os.path.join(path, f"run_{date_time}.log")
+        fh = logging.FileHandler(filename=logfile)
+        fh.setLevel(level)
+        logger.addHandler(fh)
+
+    return logger
