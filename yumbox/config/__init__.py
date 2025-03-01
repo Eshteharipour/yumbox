@@ -17,7 +17,10 @@ class CFGClass:
     def __setitem__(
         self, index: Literal["logger", "cache_dir"], value: str | logging.Logger
     ):
-        self.cfg[index] = value
+        if value:
+            if index == "cache_dir":
+                os.makedirs(value, exist_ok=True)
+            self.cfg[index] = value
 
 
 BFG = CFGClass()
