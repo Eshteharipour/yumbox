@@ -1,8 +1,10 @@
+import io
 import logging
 import os
 import sys
+from contextlib import redirect_stdout
 from datetime import datetime
-from typing import Literal
+from typing import Callable, Literal
 
 
 class CFGClass:
@@ -52,3 +54,10 @@ def setup_logger(name, level=logging.INFO, path="", stream="stdout"):
         logger.addHandler(fh)
 
     return logger
+
+
+def redir_print(func: Callable, *args, **kwargs) -> str:
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        func(*args, **kwargs)
+    return buffer.getvalue()
