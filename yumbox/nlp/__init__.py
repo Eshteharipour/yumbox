@@ -10,8 +10,6 @@ import nltk
 import six
 import unicodeblock.sequence
 from lxml import etree
-from nltk.corpus import stopwords
-from nltk.stem import PorterStemmer, WordNetLemmatizer
 from parsel import Selector
 from tqdm import tqdm
 
@@ -90,6 +88,11 @@ class Preprocessor:
             - word_post_process (we need to remove low freq words using tf-idf)
             - char_post_process (we need to remove low freq chars using mapred)
         """
+
+        init_nltk()
+        from nltk.corpus import stopwords
+        from nltk.stem import PorterStemmer, WordNetLemmatizer
+
         self.normalize_fa_chars = normalize_fa_chars
         self.remove_special_chars = remove_special_chars
         self.remove_cjk = remove_cjk
@@ -171,8 +174,6 @@ class Preprocessor:
             self.ok_unicode_ranges = (
                 self.ok_unicode_ranges + UnicodeRanges.numerical_digits_ranges
             )
-
-        init_nltk()
 
     def en_normalizer(self, s: str):
         return s.lower()
