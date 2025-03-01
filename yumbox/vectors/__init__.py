@@ -3,7 +3,7 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def topk(search_func: callable, queries: np.ndarray, k):
+def topk(search_func: callable, queries: np.ndarray, k, is_faiss_kmeans_index=False):
     nn_d = []
     nn = []
     batch_size = 512
@@ -15,7 +15,7 @@ def topk(search_func: callable, queries: np.ndarray, k):
         nn_d.append(distances)
         nn.append(indices)
 
-    if k == 1 or queries.squeeze().ndim == 1:
+    if (k == 1 or queries.squeeze().ndim == 1) and is_faiss_kmeans_index == False:
         nn_d = np.array(nn_d).flatten()
         nn = np.array(nn).flatten()
     else:
