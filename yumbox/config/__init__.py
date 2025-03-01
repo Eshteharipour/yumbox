@@ -29,6 +29,35 @@ BFG = CFGClass()
 _streams = {"stdout": sys.stdout}
 
 
+class CustomFormatter(logging.Formatter):
+    red__bg_white = "\x1b[91;47m"
+    blue = "\x1b[34m"
+    bold_cyan = "\x1b[36;1m"
+    grey = "\x1b[38;20m"
+    yellow = "\x1b[33;20m"
+    red = "\x1b[31;20m"
+    bold_red = "\x1b[31;1m"
+    reset = "\x1b[0m"
+    format = (
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+    )
+    FORMATS = {
+        logging.DEBUG: blue + format + reset,
+        # logging.DEBUG: grey + format + reset,
+        logging.INFO: bold_cyan + format + reset,
+        # logging.INFO: grey + format + reset,
+        logging.WARNING: yellow + format + reset,
+        logging.ERROR: red + format + reset,
+        logging.CRITICAL: red__bg_white + format + reset,
+        # logging.CRITICAL: bold_red + format + reset
+    }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
 def setup_logger(name, level=logging.INFO, path="", stream="stdout"):
     logger = logging.getLogger(name)
     if logger.hasHandlers():
@@ -43,8 +72,7 @@ def setup_logger(name, level=logging.INFO, path="", stream="stdout"):
 
     sh = logging.StreamHandler(stream=_streams[stream])
     sh.setLevel(level)
-    formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s")
-    sh.setFormatter(formatter)
+    sh.setFormatter(CustomFormatter())
     logger.addHandler(sh)
 
     # File logging
@@ -53,6 +81,8 @@ def setup_logger(name, level=logging.INFO, path="", stream="stdout"):
         date_time = datetime.now().isoformat()
         logfile = os.path.join(path, f"run_{date_time}.log")
         fh = logging.FileHandler(filename=logfile)
+        formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s")
+        fh.setFormatter(formatter)
         fh.setLevel(level)
         logger.addHandler(fh)
 
