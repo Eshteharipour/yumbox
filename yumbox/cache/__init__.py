@@ -7,6 +7,7 @@ from typing import Optional
 
 import faiss
 import numpy as np
+from safetensors.numpy import load_file, save_file
 
 from yumbox.config import BFG
 
@@ -149,6 +150,60 @@ def np_cache(func):
         if cache_dir:
             logger.info(f"Saving cache for {func_name} to {cache_dir}")
             np.savez(cache_file, keys=list(res.keys()), values=list(res.values()))
+            logger.info(f"Saved cache!")
+        return res
+
+    return wrapper
+
+
+def unsafe_np_cache(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        cache_file = ""
+        if cache_dir:
+            cache_file = os.path.join(cache_dir, func_name)
+            cache_file += ".npz"
+
+        if cache_dir and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_dir}")
+            res = np.load(cache_file, allow_pickle=True)
+        else:
+            res = None
+        res = func(*args, **kwargs, cache=res, cache_file=cache_file)
+        if cache_dir:
+            logger.info(f"Saving cache for {func_name} to {cache_dir}")
+            np.savez(cache_file, keys=list(res.keys()), values=list(res.values()))
+            logger.info(f"Saved cache!")
+        return res
+
+    return wrapper
+
+
+def safe_cache(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        cache_file = ""
+        if cache_dir:
+            cache_file = os.path.join(cache_dir, func_name)
+            cache_file += ".safetensors"
+
+        if cache_dir and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_dir}")
+            res = load_file(cache_file)
+        else:
+            res = None
+        res = func(*args, **kwargs, cache=res, cache_file=cache_file)
+        if cache_dir:
+            logger.info(f"Saving cache for {func_name} to {cache_dir}")
+            save_file(res, cache_file)
             logger.info(f"Saved cache!")
         return res
 
