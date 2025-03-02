@@ -300,15 +300,15 @@ def last_offset(func):
         offset_cache_dir = cache_dir
         logger = BFG["logger"]
 
-        func_name = func.__name__
         func_kwargs = []
         for k, v in kwargs.items():
             if k.endswith("_cached"):
                 func_kwargs.append(f"{k}-{v}")
         func_kwargs = " ".join(func_kwargs)
+        func_name = func.__name__ + "_" + func_kwargs
         cache_file = ""
         if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name + "_" + func_kwargs)
+            cache_file = os.path.join(cache_dir, func_name)
             cache_file += ".pkl"
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
