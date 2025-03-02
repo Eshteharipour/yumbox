@@ -305,26 +305,34 @@ def last_offset(func):
             if k.endswith("_cached"):
                 func_kwargs.append(f"{k}-{v}")
         func_kwargs = " ".join(func_kwargs)
-        func_name = func.__name__ + "_" + func_kwargs
+
+        cache_func_name = func.__name__
         cache_file = ""
         if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
+            cache_file = os.path.join(cache_dir, cache_func_name)
             cache_file += ".pkl"
         if cache_dir and os.path.isfile(cache_file):
-            logger.info(f"Loading cache for {func_name} from {cache_dir}")
+            logger.info(f"Loading cache for {cache_func_name} from {cache_dir}")
             with open(cache_file, "rb") as fd:
                 output = pickle.load(fd)
         else:
             output = None
 
-        func_name = func_name + "_" + last_offset.__name__
+        if func_kwargs:
+            offset_func_name = (
+                func.__name__ + "_" + func_kwargs + "_" + last_offset.__name__
+            )
+        else:
+            offset_func_name = func.__name__ + "_" + last_offset.__name__
         offset_cache_file = ""
         if offset_cache_dir:
-            offset_cache_file = os.path.join(offset_cache_dir, func_name)
+            offset_cache_file = os.path.join(offset_cache_dir, offset_func_name)
             offset_cache_file += ".txt"
 
         if offset_cache_dir and os.path.isfile(offset_cache_file):
-            logger.info(f"Loading offset for {func_name} from {offset_cache_dir}")
+            logger.info(
+                f"Loading offset for {offset_func_name} from {offset_cache_dir}"
+            )
             with open(offset_cache_file, "r") as fd:
                 offset = fd.readline().strip()
                 try:
@@ -340,13 +348,13 @@ def last_offset(func):
             output, offset = func(*args, **kwargs, offset=offset)
 
         if offset_cache_dir:
-            logger.info(f"Saving offset for {func_name} to {offset_cache_dir}")
+            logger.info(f"Saving offset for {offset_func_name} to {offset_cache_dir}")
             with open(offset_cache_file, "w") as fd:
                 fd.write(str(offset))
             logger.info(f"Saved offset!")
 
         if cache_dir:
-            logger.info(f"Saving cache for {func_name} to {cache_dir}")
+            logger.info(f"Saving cache for {cache_func_name} to {cache_dir}")
             with open(cache_file, "wb") as fd:
                 pickle.dump(output, fd)
             logger.info(f"Saved cache!")
