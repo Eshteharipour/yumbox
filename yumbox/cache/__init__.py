@@ -3,13 +3,13 @@ import os
 import pickle
 from collections.abc import Callable
 from time import sleep
-from typing import Optional
+from typing import Iterable, Optional
 
 import faiss
 import numpy as np
 from safetensors.numpy import load_file, save_file
 
-from yumbox.config import BFG
+from yumbox.config import BFG, redir_print
 
 # TODO: To prevent corruption on power outage,
 # save to temp location then move to target.
@@ -280,7 +280,7 @@ def retry(max_tries=5, wait=3, validator: Optional[Callable] = None):
                         logger.warning(
                             f"Exception {e} occured, retrying {retry+1}/{tries}"
                         )
-                        traceback.print_exc()
+                        logger.warning(traceback.format_exc())
                         sleep(delay)
                     continue
             if success == True:
@@ -353,3 +353,9 @@ def last_offset(func):
         return output, offset
 
     return wrapper
+
+
+def get_feats(
+    keys: Iterable[str], feats: dict[str, np.ndarray]
+) -> dict[str, np.ndarray]:
+    return np.array([feats[k] for k in keys])
