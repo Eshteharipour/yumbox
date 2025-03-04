@@ -342,10 +342,17 @@ def last_offset(func):
         else:
             offset = 0
 
+        # Un-normalize offset
+        limit = kwargs["limit"]
+        offset = int(offset / limit)
+
         if output:
-            output, offset = func(*args, **kwargs, offset=offset, cached_output=output)
+            output = func(*args, **kwargs, offset=offset, cached_output=output)
         else:
-            output, offset = func(*args, **kwargs, offset=offset)
+            output = func(*args, **kwargs, offset=offset)
+
+        # Normalize offset
+        offset = offset * limit
 
         if offset_cache_dir:
             logger.info(f"Saving offset for {offset_func_name} to {offset_cache_dir}")
@@ -358,7 +365,8 @@ def last_offset(func):
             with open(cache_file, "wb") as fd:
                 pickle.dump(output, fd)
             logger.info(f"Saved cache!")
-        return output, offset
+
+        return output
 
     return wrapper
 
