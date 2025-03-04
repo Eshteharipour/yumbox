@@ -343,8 +343,14 @@ def last_offset(func):
             offset = 0
 
         # Un-normalize offset
-        limit = kwargs["limit"]
-        offset = int(offset / limit)
+        try:
+            limit = kwargs["limit"]
+        except KeyError:
+            import inspect
+
+            sig = inspect.signature(func)
+            limit = sig.parameters["limit"].default
+        offset = offset // limit
 
         if output:
             output = func(*args, **kwargs, offset=offset, cached_output=output)
