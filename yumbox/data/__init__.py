@@ -39,7 +39,7 @@ class ImgDataset(Dataset):
         return hash, img
 
 
-no_tokenizer = lambda x: x
+no_op = lambda x: x
 
 
 class TextDataset(Dataset):
@@ -49,8 +49,8 @@ class TextDataset(Dataset):
         text_col: str,
         id_col: str,
         features: dict[str, np.ndarray],
-        preprocessor: Optional[Callable],
-        tokenizer: Optional[Callable] = no_tokenizer,
+        preprocessor: Optional[Callable] = no_op,
+        tokenizer: Optional[Callable] = no_op,
     ):
         self.preprocessor = preprocessor
         self.tokenizer = tokenizer
@@ -89,10 +89,10 @@ class TFDocumentDataset(Dataset):
         text_col: str,
         id_col: str,
         features: dict[str, np.ndarray],
-        preprocessor: Optional[Callable],
-        tokenizer: Optional[Callable],
         max_seq_length: int,
         overlap: int,
+        preprocessor: Optional[Callable] = no_op,
+        tokenizer: Optional[Callable] = no_op,
     ):
         self.preprocessor = preprocessor
         self.tokenizer = tokenizer
@@ -131,3 +131,36 @@ class TFDocumentDataset(Dataset):
             text_chunks = [prep]
 
         return idx, text_chunks
+
+
+class ZeroshotDataset(Dataset):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        text_col: str,
+        id_col: str,
+        features: dict[str, np.ndarray],
+        templates: list[str],
+        preprocessor: Optional[Callable] = no_op,
+        tokenizer: Optional[Callable] = no_op,
+    ):
+        self.templates = templates
+        self.preprocessor = preprocessor
+        self.tokenizer = tokenizer
+
+        id2text = dict(zip(df[id_col], df[text_col]))
+        id2text = {k: v for k, v in id2text.items() if k and pd.notna(k)}
+
+        missing_keys = set(id2text.keys()).difference(set(features.keys()))
+        data = [(k, id2text[k]) for k in missing_keys]
+
+        self.data = [d + (t,) for d in data for t in templates]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        idx, cls, temp = self.data[index]
+        prompt = self.tokenizer(temp.format(self.preprocessor(cls)))
+        prompt = prompt.squeeze()
+        return idx, prompt
