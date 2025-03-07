@@ -66,10 +66,10 @@ def nested_topk(
 
 def normalize_vector(v: np.ndarray | torch.Tensor):
     if isinstance(v, np.ndarray):
-        assert v.ndim == 2
-        return v / np.linalg.norm(v, axis=1, keepdims=True)
+        assert 0 < v.ndim < 3
+        return v / np.linalg.norm(v, axis=-1, keepdims=True)
     elif isinstance(v, torch.Tensor):
-        assert v.dim() == 2
-        return v / v.norm(dim=1, keepdim=True)
+        assert 0 < v.dim() < 3
+        return v / v.norm(dim=-1, keepdim=True)
     else:
         raise ValueError(f"Expected Numpy Array or Pytorch Tensor, got {type(v)}")

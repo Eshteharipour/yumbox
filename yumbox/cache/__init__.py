@@ -7,7 +7,6 @@ from collections.abc import Callable
 from time import sleep
 from typing import Iterable, Optional
 
-import faiss
 import numpy as np
 from safetensors.numpy import load_file, save_file
 
@@ -138,6 +137,8 @@ def async_cache(func):
 def index(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        import faiss
+
         cache_dir = BFG["cache_dir"]
         logger = BFG["logger"]
 

@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm import tqdm
 
 # def pca(features: dict[str, np.ndarray], n_components=128):
 #     from sklearn.decomposition import PCA
@@ -61,3 +62,49 @@ def build_index(features: np.ndarray):
     index.add(features)
 
     return index
+
+
+def self_similarity(x: np.ndarray):
+    """
+    Compute similarity matrix for x@x.T using FAISS IP index with optimizations.
+
+    Args:
+        x (np.ndarray): Input array of shape (n_samples, n_features)
+
+    Returns:
+        np.ndarray: Similarity matrix of shape (n_samples, n_samples)
+    """
+    import faiss
+
+    # Ensure x is float32 for FAISS
+    # x = np.ascontiguousarray(x, dtype=np.float32)
+    n_samples, n_features = x.shape
+
+    index = faiss.IndexFlatIP(n_features)
+    index.add(x)
+
+    sim_matrix = np.zeros((n_samples, n_samples), dtype=np.float32)
+    np.fill_diagonal(sim_matrix, 1.0)
+
+    batch_size = 256
+    for i in tqdm(range(0, n_samples - 1)):
+        q = x[i : i + 1]
+        agg_distances = []
+        agg_indices = []
+        for j in range(i + 1, n_samples, batch_size):
+            c = x[j : j + batch_size]
+            ci = build_index(c)
+            D, I = ci.search(q, k=len(c))
+            D = D.reshape(-1)
+            I = I.reshape(-1)
+            agg_distances.append(D)
+            I = I + 1 + i
+            agg_indices.append(I)
+
+        agg_distances = np.concatenate(agg_distances)
+        agg_indices = np.concatenate(agg_indices)
+
+        sim_matrix[i, agg_indices] = agg_distances
+        sim_matrix[agg_indices, i] = agg_distances
+
+    return sim_matrix
