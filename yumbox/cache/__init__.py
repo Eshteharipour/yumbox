@@ -292,14 +292,13 @@ def retry(max_tries=None, wait=None, validator: Optional[Callable] = None):
             self = args[0] if len(args) else None
             tries = coalesce(max_tries, getattr(self, "max_tries", None), 5)
             delay = coalesce(wait, getattr(self, "wait", None), 3)
-            success = False
             exception = None
             for retry in range(0, tries):
+                response = {"status": "error", "error": {"message": str(exception)}}
                 try:
                     response = func(*args, **kwargs)
                     if validator:
                         validator(*args, **kwargs, response=response)
-                    success = True
                     break
                 except Error400 as e:
                     exception = e
@@ -320,10 +319,8 @@ def retry(max_tries=None, wait=None, validator: Optional[Callable] = None):
                         logger.warning(f"KWArgs: {kwargs}")
                         sleep(delay)
                     continue
-            if success == True:
-                return response
-            else:
-                return {"status": "error", "error": {"message": str(exception)}}
+
+            return response
 
         return wrapper
 
