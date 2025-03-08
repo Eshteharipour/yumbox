@@ -13,6 +13,8 @@ from lxml import etree
 from parsel import Selector
 from tqdm import tqdm
 
+from .tools import MapRed, defaultname
+
 
 def init_nltk():
     nltk.download("stopwords")
@@ -590,10 +592,10 @@ class Chars:
     ]
 
     burn_chars_a = [
-        "\u200E",  # RLM
-        "\u200F",  # LRM
-        "\u200C",  # ZWNJ
-        "\u00AD",  # SOFT HYPHEN [SHY]
+        "\u200e",  # RLM
+        "\u200f",  # LRM
+        "\u200c",  # ZWNJ
+        "\u00ad",  # SOFT HYPHEN [SHY]
         "\u2026",  # HORIZONTAL ELLIPSIS (re.sub doesn't pick up … so used hex value)
         "®",
         "©",
@@ -634,4 +636,4 @@ class Chars:
         return f"[{burn_chars}]"
 
     def get_cjk():
-        return re.compile("[\u4E00-\u9FFF]")
+        return re.compile("[\u4e00-\u9fff]")
