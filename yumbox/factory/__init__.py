@@ -1,15 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 
-# def pca(features: dict[str, np.ndarray], n_components=128):
-#     from sklearn.decomposition import PCA
-
-#     pca = PCA(n_components=n_components, random_state=362)
-#     transformed = pca.fit_transform(np.stack(list(features.values())))
-
-
-#     features = dict(zip(features.keys(), transformed))
-#     return features
+from .faiss_indexes import *
 
 
 def pca(features: np.ndarray, n_components=128):
@@ -64,7 +56,17 @@ def build_index(features: np.ndarray):
     return index
 
 
-def self_similarity(x: np.ndarray):
+def build_index_l2(features: np.ndarray):
+    import faiss
+
+    embed_size = features[0].shape[-1]
+    index = faiss.IndexFlatL2(embed_size)
+    index.add(features)
+
+    return index
+
+
+def self_similarity(x: np.ndarray, batch_size=2048):
     """
     Compute similarity matrix for x@x.T using FAISS IP index with optimizations.
 
@@ -73,20 +75,24 @@ def self_similarity(x: np.ndarray):
 
     Returns:
         np.ndarray: Similarity matrix of shape (n_samples, n_samples)
+
+    >>> np.random.seed(42)
+
+    >>> x = np.random.randn(5, 3).astype(np.float32)
+
+    >>> x = x / np.linalg.norm(x, axis=1)[:, np.newaxis]
+
+    >>> assert np.max(np.abs(self_similarity(x) - x@x.T)) < 1e-6
+
     """
-    import faiss
 
     # Ensure x is float32 for FAISS
     # x = np.ascontiguousarray(x, dtype=np.float32)
     n_samples, n_features = x.shape
 
-    index = faiss.IndexFlatIP(n_features)
-    index.add(x)
-
     sim_matrix = np.zeros((n_samples, n_samples), dtype=np.float32)
     np.fill_diagonal(sim_matrix, 1.0)
 
-    batch_size = 256
     for i in tqdm(range(0, n_samples - 1)):
         q = x[i : i + 1]
         agg_distances = []
