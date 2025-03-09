@@ -139,8 +139,6 @@ class defaultname:
     """
 
     def __init__(self):
-        # def __init__(self, preprocess=True):
-        # self.preprocess = preprocess
         self._dict: dict[str, str] = {}
         # self._backref_is_valid = True
         self._backref_dict: dict[str, list] = {}
@@ -155,10 +153,6 @@ class defaultname:
         4) If no default is found, creates new default from new_default
         and add new_child to it's set.
         """
-
-        # if self.preprocess:
-        #     new_default = new_default.strip().lower()
-        #     new_alt = new_alt.strip().lower()
 
         if not new_default:
             raise ValueError("new_default is empty!")
@@ -249,11 +243,7 @@ class defaultname:
             return None
 
     def __getitem__(self, index: str):
-        """Search for key, returns default if found,
-        otherwise create a new default."""
-
-        # if self.preprocess:
-        #     index = index.strip().lower()
+        """Search for key, returns default if found, otherwise returns self."""
 
         if not index:
             raise ValueError("Index is empty!")
@@ -264,9 +254,6 @@ class defaultname:
         if default:
             return default
         else:
-            # if not found, make a default
-            # self._backref_is_valid = False
-            self._dict[index] = index
             return index
 
     def __call__(self, index):
