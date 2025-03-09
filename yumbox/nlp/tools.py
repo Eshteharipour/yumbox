@@ -215,14 +215,10 @@ class defaultname:
 
         self._backref_dict: dict[str, list[str]] = {}
         for alt, default in self._dict.items():
-            if alt != default:
-                try:
-                    self._backref_dict[default].append(alt)
-                except KeyError:
-                    self._backref_dict[default] = [alt]
-            else:
-                if default not in self._backref_dict:
-                    self._backref_dict[default] = []
+            try:
+                self._backref_dict[default].append(alt)
+            except KeyError:
+                self._backref_dict[default] = [alt]
 
         # self._backref_is_valid = True
 
