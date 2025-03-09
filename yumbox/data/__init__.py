@@ -6,6 +6,8 @@ import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset
 
+no_op = lambda x: x
+
 
 class ImgDataset(Dataset):
     def __init__(
@@ -14,7 +16,7 @@ class ImgDataset(Dataset):
         path_col: str,
         hash_col: str,
         features: dict[str, np.ndarray],
-        transform: Optional[Callable],
+        transform: Optional[Callable] = no_op,
     ):
         self.transform = transform
 
@@ -37,9 +39,6 @@ class ImgDataset(Dataset):
         img = Image.open(path).convert("RGB")
         img = self.transform(img)
         return hash, img
-
-
-no_op = lambda x: x
 
 
 class TextDataset(Dataset):
