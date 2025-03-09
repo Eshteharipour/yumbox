@@ -73,3 +73,24 @@ def normalize_vector(v: np.ndarray | torch.Tensor):
         return v / v.norm(dim=-1, keepdim=True)
     else:
         raise ValueError(f"Expected Numpy Array or Pytorch Tensor, got {type(v)}")
+
+
+def full_feats(
+    df: pd.DataFrame, feats: dict[str, np.ndarray], colname: str
+) -> dict[str, np.ndarray]:
+    return {x: feats[x] for x in df[colname].values}
+
+
+def partial_feats(
+    df: pd.DataFrame, feats: dict[str, np.ndarray], colname: str
+) -> dict[str, np.ndarray]:
+    return {x: feats[x] for x in df[colname].values if bool(x) and pd.notna(x)}
+
+
+def reconstruct_original_index(
+    target: np.ndarray | list, missing_indices: np.ndarray | list, fill_value=None
+):
+    target = list(target)
+    for index in missing_indices:
+        target.insert(index, fill_value)
+    return np.array(target, dtype=object)
