@@ -206,6 +206,7 @@ class defaultname:
             return new_alt
         # elif new_default_found:
         #     self._dict[new_alt] = new_default
+        #     return new_default
         else:
             self._dict[new_alt] = new_default
             return new_default
