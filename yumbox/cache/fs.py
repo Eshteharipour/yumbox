@@ -44,6 +44,19 @@ def retry_on_lock(max_attempts: int = 5, delay: float = 3.0):
     return decorator
 
 
+def safe_save_lambda(file_path: str, save_func: Callable):
+    temp_dir = os.path.dirname(file_path)
+    os.makedirs(temp_dir, exist_ok=True)
+    file_ext = os.path.splitext(file_path)[1] or None
+
+    with tempfile.NamedTemporaryFile(
+        delete=False, dir=temp_dir, suffix=file_ext
+    ) as tmp_file:
+        save_func(file_path)
+
+    safe_move(tmp_file.name, file_path)
+
+
 def safe_save_kw(
     file_path: str,
     save_func: Callable,
@@ -51,6 +64,7 @@ def safe_save_kw(
     **save_func_kwargs,
 ):
     temp_dir = os.path.dirname(file_path)
+    os.makedirs(temp_dir, exist_ok=True)
     file_ext = os.path.splitext(file_path)[1] or None
 
     with tempfile.NamedTemporaryFile(
@@ -69,6 +83,7 @@ def safe_save(
     **save_func_kwargs,
 ):
     temp_dir = os.path.dirname(file_path)
+    os.makedirs(temp_dir, exist_ok=True)
     file_ext = os.path.splitext(file_path)[1] or None
 
     with tempfile.NamedTemporaryFile(
@@ -87,6 +102,7 @@ def safe_wopen(
     **save_func_kwargs,
 ):
     temp_dir = os.path.dirname(file_path)
+    os.makedirs(temp_dir, exist_ok=True)
     file_ext = os.path.splitext(file_path)[1] or None
 
     with tempfile.NamedTemporaryFile(
@@ -100,6 +116,7 @@ def safe_wopen(
 
 def safe_wopen_fd(file_path: str, obj: object, *save_func_args, **save_func_kwargs):
     temp_dir = os.path.dirname(file_path)
+    os.makedirs(temp_dir, exist_ok=True)
     file_ext = os.path.splitext(file_path)[1] or None
 
     with tempfile.NamedTemporaryFile(
@@ -114,6 +131,21 @@ def safe_wopen_fd(file_path: str, obj: object, *save_func_args, **save_func_kwar
 @retry_on_lock()
 def safe_move(src: str, dst: str):
     return shutil.move(src, dst)
+
+
+@retry_on_lock()
+def safe_load_lambda(file_path: str, load_func: Callable):
+    logger = BFG["logger"]
+
+    if not os.path.exists(file_path):
+        logger.error(f"File {file_path} does not exist")
+        raise FileNotFoundError(f"File {file_path} does not exist")
+
+    if not os.access(file_path, os.R_OK):
+        logger.error(f"No read permission for {file_path}")
+        raise PermissionError(f"No read permission for {file_path}")
+
+    return load_func(file_path)
 
 
 @retry_on_lock()
@@ -171,6 +203,7 @@ def safe_wpickle(path: str, obj: object):
     #     pickle.dump(obj, fd)
 
 
+@retry_on_lock()
 def safe_rpickle(path: str):
     return safe_ropen(path, pickle.load, "rb")
     # with open(path, "rb") as fd:
