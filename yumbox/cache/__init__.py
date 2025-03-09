@@ -1,49 +1,17 @@
 import functools
 import os
-import pickle
-import shutil
-import tempfile
 from collections.abc import Callable
 from time import sleep
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 import numpy as np
 from safetensors.numpy import load_file, save_file
 
 from yumbox.config import BFG
 
+from .fs import *
 
-def safe_save(file_path: str, save_func: Callable, *save_func_args, **save_func_kwargs):
-    temp_dir = os.path.dirname(file_path)
-    file_ext = os.path.splitext(file_path)[1] or None
-
-    with tempfile.NamedTemporaryFile(
-        delete=False, dir=temp_dir, suffix=file_ext
-    ) as tmp_file:
-        save_func(tmp_file.name, *save_func_args, **save_func_kwargs)
-
-    shutil.move(tmp_file.name, file_path)
-
-
-def safe_load():
-    pass
-
-
-def safe_openw(file_path: str, *save_func_args, **save_func_kwargs):
-    temp_dir = os.path.dirname(file_path)
-    file_ext = os.path.splitext(file_path)[1] or None
-
-    with tempfile.NamedTemporaryFile(
-        delete=False, dir=temp_dir, suffix=file_ext
-    ) as tmp_file:
-        with open(tmp_file.name) as fd:
-            fd.write(*save_func_args, **save_func_kwargs)
-
-    shutil.move(tmp_file.name, file_path)
-
-
-def safe_openr():
-    pass
+# TODO: fix safe_save_kw
 
 
 def cache(func):
@@ -60,14 +28,16 @@ def cache(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            with open(cache_file, "rb") as fd:
-                return pickle.load(fd)
+            return safe_rpickle(cache_file)
+            # with open(cache_file, "rb") as fd:
+            #     return pickle.load(fd)
         else:
             result = func(*args, **kwargs)
             if cache_dir:
                 logger.info(f"Saving cache for {func_name} to {cache_dir}")
-                with open(cache_file, "wb") as fd:
-                    pickle.dump(result, fd)
+                safe_wpickle(cache_file, result)
+                # with open(cache_file, "wb") as fd:
+                #     pickle.dump(result, fd)
                 logger.info(f"Saved cache!")
             return result
 
@@ -92,14 +62,16 @@ def cache_kwargs(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            with open(cache_file, "rb") as fd:
-                return pickle.load(fd)
+            return safe_rpickle(cache_file)
+            # with open(cache_file, "rb") as fd:
+            #     return pickle.load(fd)
         else:
             result = func(*args, **kwargs)
             if cache_dir:
                 logger.info(f"Saving cache for {func_name} to {cache_dir}")
-                with open(cache_file, "wb") as fd:
-                    pickle.dump(result, fd)
+                safe_wpickle(cache_file, result)
+                # with open(cache_file, "wb") as fd:
+                #     pickle.dump(result, fd)
                 logger.info(f"Saved cache!")
             return result
 
@@ -120,14 +92,16 @@ def async_cache(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            with open(cache_file, "rb") as fd:
-                return pickle.load(fd)
+            return safe_rpickle(cache_file)
+            # with open(cache_file, "rb") as fd:
+            #     return pickle.load(fd)
         else:
             result = await func(*args, **kwargs)
             if cache_dir:
                 logger.info(f"Saving cache for {func_name} to {cache_dir}")
-                with open(cache_file, "wb") as fd:
-                    pickle.dump(result, fd)
+                safe_wpickle(cache_file, result)
+                # with open(cache_file, "wb") as fd:
+                #     pickle.dump(result, fd)
                 logger.info(f"Saved cache!")
             return result
 
@@ -150,12 +124,14 @@ def index(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            return faiss.read_index(cache_file)
+            return safe_load(cache_file, faiss.read_index)
+            # return faiss.read_index(cache_file)
         else:
             result = func(*args, **kwargs)
             if cache_dir:
                 logger.info(f"Saving cache for {func_name} to {cache_dir}")
-                faiss.write_index(result, cache_file)
+                safe_save(cache_file, result, faiss.write_index)
+                # faiss.write_index(result, cache_file)
                 logger.info(f"Saved cache!")
             return result
 
@@ -176,13 +152,17 @@ def np_cache(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            res = np.load(cache_file)
+            res = safe_load(cache_file, np.load)
+            # res = np.load(cache_file)
         else:
             res = None
         res = func(*args, **kwargs, cache=res, cache_file=cache_file)
         if cache_dir:
             logger.info(f"Saving cache for {func_name} to {cache_dir}")
-            np.savez(cache_file, keys=list(res.keys()), values=list(res.values()))
+            safe_save_kw(
+                cache_file, np.savez, keys=list(res.keys()), values=list(res.values())
+            )
+            # np.savez(cache_file, keys=list(res.keys()), values=list(res.values()))
             logger.info(f"Saved cache!")
         return res
 
@@ -203,13 +183,17 @@ def unsafe_np_cache(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            res = np.load(cache_file, allow_pickle=True)
+            res = safe_load(cache_file, np.load, allow_pickle=True)
+            # res = np.load(cache_file, allow_pickle=True)
         else:
             res = None
         res = func(*args, **kwargs, cache=res, cache_file=cache_file)
         if cache_dir:
             logger.info(f"Saving cache for {func_name} to {cache_dir}")
-            np.savez(cache_file, keys=list(res.keys()), values=list(res.values()))
+            safe_save_kw(
+                cache_file, np.savez, keys=list(res.keys()), values=list(res.values())
+            )
+            # np.savez(cache_file, keys=list(res.keys()), values=list(res.values()))
             logger.info(f"Saved cache!")
         return res
 
@@ -230,13 +214,15 @@ def safe_cache(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            res = load_file(cache_file)
+            res = safe_load(cache_file, load_file)
+            # res = load_file(cache_file)
         else:
             res = None
         res = func(*args, **kwargs, cache=res, cache_file=cache_file)
         if cache_dir:
             logger.info(f"Saving cache for {func_name} to {cache_dir}")
-            save_file(res, cache_file)
+            safe_save(cache_file, res, save_file)
+            # save_file(res, cache_file)
             logger.info(f"Saved cache!")
         return res
 
@@ -257,15 +243,17 @@ def kv_cache(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            with open(cache_file, "rb") as fd:
-                res = pickle.load(fd)
+            res = safe_rpickle(cache_file)
+            # with open(cache_file, "rb") as fd:
+            #     res = pickle.load(fd)
         else:
             res = None
         res = func(*args, **kwargs, cache=res, cache_file=cache_file)
         if cache_dir:
             logger.info(f"Saving cache for {func_name} to {cache_dir}")
-            with open(cache_file, "wb") as fd:
-                pickle.dump(res, fd)
+            safe_wpickle(cache_file, res)
+            # with open(cache_file, "wb") as fd:
+            #     pickle.dump(res, fd)
             logger.info(f"Saved cache!")
         return res
 
@@ -347,8 +335,9 @@ def last_offset(func):
             cache_file += ".pkl"
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {cache_func_name} from {cache_dir}")
-            with open(cache_file, "rb") as fd:
-                output = pickle.load(fd)
+            output = safe_rpickle(cache_file)
+            # with open(cache_file, "rb") as fd:
+            #     output = pickle.load(fd)
         else:
             output = None
 
@@ -367,12 +356,17 @@ def last_offset(func):
             logger.info(
                 f"Loading offset for {offset_func_name} from {offset_cache_dir}"
             )
-            with open(offset_cache_file, "r") as fd:
-                offset = fd.readline().strip()
-                try:
-                    offset = int(offset)
-                except ValueError:
-                    offset = 0
+            offset = safe_ropen_fd(offset_cache_file, "readline", "r").strip()
+            try:
+                offset = int(offset)
+            except ValueError:
+                offset = 0
+            # with open(offset_cache_file, "r") as fd:
+            #     offset = fd.readline().strip()
+            #     try:
+            #         offset = int(offset)
+            #     except ValueError:
+            #         offset = 0
         else:
             offset = 0
 
@@ -396,14 +390,16 @@ def last_offset(func):
 
         if offset_cache_dir:
             logger.info(f"Saving offset for {offset_func_name} to {offset_cache_dir}")
-            with open(offset_cache_file, "w") as fd:
-                fd.write(str(offset))
+            safe_wopen_fd(offset_cache_file, str(offset), "w")
+            # with open(offset_cache_file, "w") as fd:
+            #     fd.write(str(offset))
             logger.info(f"Saved offset!")
 
         if cache_dir:
             logger.info(f"Saving cache for {cache_func_name} to {cache_dir}")
-            with open(cache_file, "wb") as fd:
-                pickle.dump(output, fd)
+            safe_wpickle(cache_file, output)
+            # with open(cache_file, "wb") as fd:
+            #     pickle.dump(output, fd)
             logger.info(f"Saved cache!")
 
         return output
@@ -431,8 +427,9 @@ def last_str_offset(func):
             cache_file += ".pkl"
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {cache_func_name} from {cache_dir}")
-            with open(cache_file, "rb") as fd:
-                output = pickle.load(fd)
+            output = safe_rpickle(cache_file)
+            # with open(cache_file, "rb") as fd:
+            #     output = pickle.load(fd)
         else:
             output = None
 
@@ -451,8 +448,10 @@ def last_str_offset(func):
             logger.info(
                 f"Loading offset for {offset_func_name} from {offset_cache_dir}"
             )
-            with open(offset_cache_file, "r") as fd:
-                offset = str(fd.readline().strip())
+            offset = str(safe_ropen_fd(offset_cache_file, "readline", "r").strip())
+            # with open(offset_cache_file, "r") as fd:
+            #     offset = str(fd.readline().strip())
+            logger.info(f"Loaded offset!")
         else:
             offset = None
 
@@ -463,14 +462,16 @@ def last_str_offset(func):
 
         if offset_cache_dir and offset is not None:
             logger.info(f"Saving offset for {offset_func_name} to {offset_cache_dir}")
-            with open(offset_cache_file, "w") as fd:
-                fd.write(str(offset))
+            safe_wopen_fd(offset_cache_file, str(offset), "w")
+            # with open(offset_cache_file, "w") as fd:
+            #     fd.write(str(offset))
             logger.info(f"Saved offset!")
 
         if cache_dir:
             logger.info(f"Saving cache for {cache_func_name} to {cache_dir}")
-            with open(cache_file, "wb") as fd:
-                pickle.dump(output, fd)
+            safe_wpickle(cache_file, output)
+            # with open(cache_file, "wb") as fd:
+            #     pickle.dump(output, fd)
             logger.info(f"Saved cache!")
 
         return output, offset
@@ -478,7 +479,5 @@ def last_str_offset(func):
     return wrapper
 
 
-def get_feats(
-    keys: Iterable[str], feats: dict[str, np.ndarray]
-) -> dict[str, np.ndarray]:
+def get_feats(keys: Iterable[str], feats: dict[str]) -> dict[str]:
     return np.array([feats[k] for k in keys])
