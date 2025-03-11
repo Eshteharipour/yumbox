@@ -1,4 +1,5 @@
-from typing import Literal
+from collections import defaultdict
+from typing import Iterable, Literal
 
 import pandas as pd
 
@@ -81,67 +82,164 @@ class defaultname:
     to their default name. Kind of like the contecpt of defaultdict.
     Default name could be a "parent" name for example.
 
+    # Performance improvement 1:
     # version 1 was default name to alt names (dict[str, set])
     # version 2 is alt name to default name (dict[str, str])
     # version 2 is current version, which is faster
 
+    # Performance improvement 2:
+    Instead of building the backref dict each time we encounter a case where we
+    find default names for both args in function add(new_default and new_alt),
+    we can continue to have it updated on all operations.
+
+    # Performance improvement 2:
+    This is faster:
+    ```
+    for a in alts:
+        self._dict[a] = new_default
+    ```
+    Than:
+    `self._dict.update({a: new_default for a in alts})`
+
+
+
     Example:
-    x1, x2, y, y1 are all alternate names of x
+    a, b, y, c are all alternate names of x
     >>> resolver = defaultname()
-    >>> resolver.add("x", "x1")
+    >>> resolver.add("x", "a")
     'x'
-    >>> resolver.add("x", "x2")
+    >>> resolver.add("x", "b")
     'x'
-    >>> resolver.add("y", "x1")
+    >>> resolver.add("y", "a")
     'x'
-    >>> resolver.add("y1", "x1")
+    >>> resolver.add("c", "a")
     'x'
-    >>> resolver._dict == {'x1': 'x', 'x2': 'x', 'y': 'x', 'y1': 'x'}
+    >>> resolver._dict
+    {'a': 'x', 'b': 'x', 'y': 'x', 'c': 'x'}
+    >>> resolver._backref_dict == {'x': {'a', 'b', 'y', 'c'}}
+    True
+    >>> resolver._build_backref() == resolver._backref_dict
     True
 
+
     If we change order of names being added,
-    x1, y1, x, x2 are alternate names of y
+    a, c, x, b are alternate names of y
     >>> resolver = defaultname()
-    >>> resolver.add("y", "x1")
+    >>> resolver.add("y", "a")
     'y'
-    >>> resolver.add("y1", "x1")
+    >>> resolver.add("c", "a")
     'y'
-    >>> resolver.add("x", "x1")
+    >>> resolver.add("x", "a")
     'y'
-    >>> resolver.add("x", "x2")
+    >>> resolver.add("x", "b")
     'y'
-    >>> resolver._dict == {'x1': 'y', 'y1': 'y', 'x': 'y', 'x2': 'y'}
+    >>> resolver._dict
+    {'a': 'y', 'c': 'y', 'x': 'y', 'b': 'y'}
+    >>> resolver._backref_dict == {'y': {'a', 'c', 'x', 'b'}}
+    True
+    >>> resolver._build_backref() == resolver._backref_dict
     True
 
     Unite different defaults
-    Such as default (x1) already has a parent (x)
+    Such as default (a) already has a parent (x)
     >>> resolver = defaultname()
-    >>> resolver.add("x", "x1")
+    >>> resolver.add("x", "a")
     'x'
-    >>> resolver.add("x1", "x2")
+    >>> resolver.add("a", "b")
     'x'
-    >>> resolver.add("y", "x2")
+    >>> resolver.add("y", "b")
     'x'
-    >>> resolver._dict == {'x1': 'x', 'x2': 'x', 'y': 'x'}
+    >>> resolver._dict
+    {'a': 'x', 'b': 'x', 'y': 'x'}
+    >>> resolver._backref_dict == {'x': {'a', 'b', 'y'}}
+    True
+    >>> resolver._build_backref() == resolver._backref_dict
     True
 
     If two alternate names are passed
     >>> resolver = defaultname()
-    >>> resolver.add("x", "x1")
+    >>> resolver.add("x", "a")
     'x'
-    >>> resolver.add("x", "x2")
+    >>> resolver.add("x", "b")
     'x'
-    >>> resolver.add("x1", "x2")
+    >>> resolver.add("a", "b")
     'x'
-    >>> resolver._dict == {'x1': 'x', 'x2': 'x'}
+    >>> resolver._dict
+    {'a': 'x', 'b': 'x'}
+    >>> resolver._backref_dict == {'x': {'a', 'b'}}
+    True
+    >>> resolver._build_backref() == resolver._backref_dict
+    True
+
+    # This test reflects the issue in large dataset example
+    # Old code was not passing the large dataset test and then this test
+    >>> resolver = defaultname()
+    >>> resolver.add("x", "a")
+    'x'
+    >>> resolver.add("y", "b")
+    'y'
+    >>> resolver.add("x", "y")
+    'x'
+    >>> resolver._dict
+    {'a': 'x', 'b': 'x', 'y': 'x'}
+    >>> resolver._backref_dict == {'x': {'a', 'b', 'y'}}
+    True
+    >>> resolver._build_backref() == resolver._backref_dict
+    True
+
+    >>> resolver = defaultname()
+    >>> resolver.add("x", "a")
+    'x'
+    >>> resolver.add("y", "b")
+    'y'
+    >>> resolver.add("a", "b")
+    'x'
+    >>> resolver._dict
+    {'a': 'x', 'b': 'x', 'y': 'x'}
+    >>> resolver._backref_dict == {'x': {'a', 'b', 'y'}}
+    True
+    >>> resolver._build_backref() == resolver._backref_dict
+    True
+
+    >>> import random
+    >>> from tqdm import tqdm
+    >>> random.seed(362)
+    >>> resolver = defaultname()
+    >>> def generate_random_string():
+    ...     characters = "abcdef"
+    ...     return "".join(random.choices(characters, k=6))
+    >>> for i in tqdm(range(0, 1000000)):
+    ...     a = generate_random_string()
+    ...     b = generate_random_string()
+    ...     _ = resolver.add(a, b)
+    >>> resolver._build_backref().keys()
+    dict_keys(['bbcaea'])
+
+    >>> resolver._backref_dict.keys()
+    dict_keys(['bbcaea'])
+
+    >>> set(resolver._dict.values())
+    {'bbcaea'}
+
+    >>> set(resolver._build_backref().keys()) == set(resolver._dict.values())
+    True
+
+    >>> sorted(resolver._backref_dict.keys()) == sorted(resolver._build_backref().keys())
+    True
+
+    >>> sorted(resolver._backref_dict.values()) == sorted(resolver._build_backref().values())
+    True
+
+    >>> resolver._build_backref() == resolver._backref_dict
     True
 
     """
 
     def __init__(self):
+        # main dict which is alternate name (key) to default name (value).
         self._dict: dict[str, str] = {}
-        # self._backref_is_valid = True
-        self._backref_dict: dict[str, list] = {}
+        # back-references which is default to alternate names.
+        self._backref_dict: defaultdict[str, set] = defaultdict(set)
 
     def add(self, new_default: str, new_alt: str):
         """Adds pair to dict returning the new default or default if found.
@@ -182,58 +280,55 @@ class defaultname:
         if new_default == new_alt:
             return new_default
 
-        # self._backref_is_valid = False
+        # Unite two sets
+        if new_default_found and new_alt_found:
+            # alts = {
+            #     my_alt
+            #     for my_alt, my_default in self._dict.items()
+            #     if my_default == new_alt
+            # }
+            # Performance improvement: instead of searching or new_alt in _dict's values we use:
+            alts = self._backref_dict.pop(new_alt)
 
-        # unite two sets
-        if new_default_found and new_alt_found:  # expensive
-            # alts = self._backref_search(new_alt)
-            # faster method
-            alts = {
-                my_alt
-                for my_alt, my_default in self._dict.items()
-                if my_default == new_alt
-            }
+            self._backref_dict[new_default].update(alts)
 
-            # for a in alts:
-            #     self._dict[a] = new_default
-            # faster method
-            self._dict.update({a: new_default for a in alts})
+            for a in alts:
+                self._dict[a] = new_default
 
             self._dict[new_alt] = new_default
+            self._backref_dict[new_default].add(new_alt)
             return new_default
         elif new_alt_found:
             self._dict[new_default] = new_alt
+            self._backref_dict[new_alt].add(new_default)
             return new_alt
-        # elif new_default_found:
-        #     self._dict[new_alt] = new_default
-        #     return new_default
         else:
             self._dict[new_alt] = new_default
+            self._backref_dict[new_default].add(new_alt)
             return new_default
 
     def _build_backref(self):
-        """Build backreferences dict which is default to alternate names."""
+        """Build backreferences dict which is default to alternate names.
+        This is only to be used in tests."""
 
-        self._backref_dict: dict[str, list[str]] = {}
+        _backref_dict: dict[str, set] = defaultdict(set)
         for alt, default in self._dict.items():
-            try:
-                self._backref_dict[default].append(alt)
-            except KeyError:
-                self._backref_dict[default] = [alt]
+            _backref_dict[default].add(alt)
 
-        # self._backref_is_valid = True
+        return _backref_dict
 
     def _backref_search(self, index: str):
-        """Find backreferences which is default to alternate names."""
-
-        # if not self._backref_is_valid:
-        self._build_backref()
+        """Find backreferences which is default to alternate names.
+        Not used."""
 
         return self._backref_dict[index]
 
     def _search(self, index: str):
         """Searches dict for key, returns default name if found."""
 
+        # Major bug fix: we don't set default -> default in _dict so we need to search in:
+        if index in self._backref_dict:
+            return index
         try:
             return self._dict[index]
         except KeyError:
@@ -262,10 +357,21 @@ class defaultname:
             return self.__getitem__(index)
 
     def get_dataset(self):
-        """Gets default name to alternate names list dataset.
-        Uses _backref_dict and convert dict[str, set] to dict[str, list]."""
+        """Gets default name to alternate names list dataset."""
 
-        # if not self._backref_is_valid:
-        self._build_backref()
+        list_backref_dict: dict[str, list] = {}
+        for alt, default in self._dict.items():
+            try:
+                list_backref_dict[default].append(alt)
+            except KeyError:
+                list_backref_dict[default] = [alt]
 
-        return self._backref_dict
+        return list_backref_dict
+
+
+def join_defaultname(self, a: defaultname, b: defaultname):
+    pass
+
+
+def batch_defaultname(defaults: Iterable, alts: Iterable):
+    pass
