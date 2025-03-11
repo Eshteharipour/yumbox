@@ -52,7 +52,7 @@ def safe_save_lambda(file_path: str, save_func: Callable):
     with tempfile.NamedTemporaryFile(
         delete=False, dir=temp_dir, suffix=file_ext
     ) as tmp_file:
-        save_func(file_path)
+        save_func(tmp_file.name)
 
     safe_move(tmp_file.name, file_path)
 
