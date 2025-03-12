@@ -280,6 +280,8 @@ def retry(max_tries=None, wait=None, validator: Optional[Callable] = None):
             self = args[0] if len(args) else None
             tries = coalesce(max_tries, getattr(self, "max_tries", None), 5)
             delay = coalesce(wait, getattr(self, "wait", None), 3)
+            if tries == 0:
+                tries = 1
             exception = None
             for retry in range(0, tries):
                 response = {"status": "error", "error": {"message": str(exception)}}

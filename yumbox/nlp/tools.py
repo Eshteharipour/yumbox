@@ -369,9 +369,9 @@ class defaultname:
         return list_backref_dict
 
 
-def join_defaultname(self, a: defaultname, b: defaultname):
+def join_defaultname(a: defaultname, b: defaultname):
     pass
 
 
-def batch_defaultname(defaults: Iterable, alts: Iterable):
+def batch_defaultname(defaults: Iterable, alts: Iterable, num_workers: int):
     pass
