@@ -1,4 +1,4 @@
-from . import cache, config, data, nlp
+from . import cache, config, data, factory, metrics, nlp, vectors
 
 
 def random_seed(rank, seed=362):

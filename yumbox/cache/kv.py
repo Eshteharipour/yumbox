@@ -2,6 +2,7 @@ import os
 
 import lmdb
 import msgpack
+from lmdb import Environment
 
 
 class LMDB_API:
@@ -13,16 +14,11 @@ class LMDB_API:
         :param map_size: Max size in bytes (default 10MB, adjust as needed).
         """
         self.folder = folder
-        os.makedirs(folder, exist_ok=True)  # Ensure folder exists
+        os.makedirs(folder, exist_ok=True)
         self.db_path = os.path.join(folder, db_name)
-        self.env = lmdb.open(
-            self.db_path, map_size=map_size, lock=False
-        )  # Single file in folder
-        self.data_prefix = b"data:"  # Namespace for actual data
 
-    def _key_to_bytes(self, key: str) -> bytes:
-        """Convert str key to bytes."""
-        return key.encode()
+        self.env: Environment = lmdb.open(self.db_path, map_size=map_size, lock=False)
+        self.data_prefix = b"data:"  # Namespace for actual data
 
     def _data_id_to_bytes(self, data_id: str) -> bytes:
         """Convert data ID to bytes."""
@@ -31,16 +27,16 @@ class LMDB_API:
     def exists(self, key: str) -> bool:
         """Check if a key exists."""
         with self.env.begin() as txn:
-            key_bytes = self._key_to_bytes(key)
+            key_bytes = key.encode()
             return txn.get(key_bytes) is not None
 
-    def batch_exists(self, keys: list[str]) -> dict[str, bool]:
+    def batch_exists(self, keys: list[str]) -> list[bool]:
         """Check existence of multiple keys in batch."""
-        result = {}
+        result = []
         with self.env.begin() as txn:
             for key in keys:
-                key_bytes = self._key_to_bytes(key)
-                result[key] = txn.get(key_bytes) is not None
+                key_bytes = key.encode()
+                result.append(txn.get(key_bytes) is not None)
         return result
 
     def create(self, key: str, data: dict, data_id: str | None = None) -> str:
@@ -49,7 +45,7 @@ class LMDB_API:
         :return: The data_id used.
         """
         with self.env.begin(write=True) as txn:
-            key_bytes = self._key_to_bytes(key)
+            key_bytes = key.encode()
             if txn.get(key_bytes):
                 raise ValueError(f"Key {key} already exists")
 
@@ -69,7 +65,7 @@ class LMDB_API:
     def update(self, key: str, data: dict):
         """Update the data for an existing key (affects all keys referencing the same data)."""
         with self.env.begin(write=True) as txn:
-            key_bytes = self._key_to_bytes(key)
+            key_bytes = key.encode()
             data_id = txn.get(key_bytes)
             if not data_id:
                 raise KeyError(f"Key {key} does not exist")
@@ -80,7 +76,7 @@ class LMDB_API:
     def delete(self, key: str):
         """Delete a key. Data remains if referenced by other keys."""
         with self.env.begin(write=True) as txn:
-            key_bytes = self._key_to_bytes(key)
+            key_bytes = key.encode()
             if not txn.get(key_bytes):
                 raise KeyError(f"Key {key} does not exist")
             txn.delete(key_bytes)
@@ -88,7 +84,7 @@ class LMDB_API:
     def get(self, key: str) -> dict | None:
         """Get data by key."""
         with self.env.begin() as txn:
-            key_bytes = self._key_to_bytes(key)
+            key_bytes = key.encode()
             data_id = txn.get(key_bytes)
             if data_id:
                 data_id_bytes = self._data_id_to_bytes(data_id.decode())
@@ -97,9 +93,9 @@ class LMDB_API:
                     return msgpack.unpackb(data_bytes, raw=False)
         return None
 
-    def get_dataset(self) -> list:
+    def get_dataset(self) -> dict[str, dict]:
         """Export entire database to a list."""
-        records = []
+        records = {}
         with self.env.begin() as txn:
             cursor = txn.cursor()
             for key_bytes, value_bytes in cursor:
@@ -110,9 +106,7 @@ class LMDB_API:
                 data_bytes = txn.get(self._data_id_to_bytes(data_id))
                 if data_bytes:
                     data = msgpack.unpackb(data_bytes, raw=False)
-                    records.append(
-                        {"a": key[0], "b": key[1], "c": key[2], "d": key[3], **data}
-                    )
+                    records[key] = data
         return records
 
     def close(self):
