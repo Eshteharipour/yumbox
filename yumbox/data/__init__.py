@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -16,7 +15,7 @@ class ImgDataset(Dataset):
         path_col: str,
         hash_col: str,
         features: dict[str, np.ndarray],
-        transform: Optional[Callable] = no_op,
+        transform: Callable | None = no_op,
     ):
         self.transform = transform
 
@@ -48,8 +47,8 @@ class TextDataset(Dataset):
         text_col: str,
         id_col: str,
         features: dict[str, np.ndarray],
-        preprocessor: Optional[Callable] = no_op,
-        tokenizer: Optional[Callable] = no_op,
+        preprocessor: Callable | None = no_op,
+        tokenizer: Callable | None = no_op,
     ):
         self.preprocessor = preprocessor
         self.tokenizer = tokenizer
@@ -90,8 +89,8 @@ class TFDocumentDataset(Dataset):
         features: dict[str, np.ndarray],
         max_seq_length: int,
         overlap: int,
-        preprocessor: Optional[Callable] = no_op,
-        tokenizer: Optional[Callable] = no_op,
+        preprocessor: Callable | None = no_op,
+        tokenizer: Callable | None = no_op,
     ):
         self.preprocessor = preprocessor
         self.tokenizer = tokenizer
@@ -140,8 +139,8 @@ class ZeroshotDataset(Dataset):
         id_col: str,
         features: dict[str, np.ndarray],
         templates: list[str],
-        preprocessor: Optional[Callable] = no_op,
-        tokenizer: Optional[Callable] = no_op,
+        preprocessor: Callable | None = no_op,
+        tokenizer: Callable | None = no_op,
     ):
         self.templates = templates
         self.preprocessor = preprocessor

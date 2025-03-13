@@ -1,9 +1,7 @@
 import os
-from typing import Optional
 
 import lmdb
 import msgpack
-import pandas as pd
 
 
 class LMDB_API:
@@ -45,7 +43,7 @@ class LMDB_API:
                 result[key] = txn.get(key_bytes) is not None
         return result
 
-    def create(self, key: str, data: dict, data_id: Optional[str] = None) -> str:
+    def create(self, key: str, data: dict, data_id: str | None = None) -> str:
         """
         Create a new entry. If data_id is provided, use it; otherwise, generate one.
         :return: The data_id used.
@@ -87,7 +85,7 @@ class LMDB_API:
                 raise KeyError(f"Key {key} does not exist")
             txn.delete(key_bytes)
 
-    def get(self, key: str) -> Optional[dict]:
+    def get(self, key: str) -> dict | None:
         """Get data by key."""
         with self.env.begin() as txn:
             key_bytes = self._key_to_bytes(key)
@@ -99,8 +97,8 @@ class LMDB_API:
                     return msgpack.unpackb(data_bytes, raw=False)
         return None
 
-    def to_dataframe(self) -> pd.DataFrame:
-        """Export entire database to a DataFrame."""
+    def get_dataset(self) -> list:
+        """Export entire database to a list."""
         records = []
         with self.env.begin() as txn:
             cursor = txn.cursor()
@@ -115,7 +113,7 @@ class LMDB_API:
                     records.append(
                         {"a": key[0], "b": key[1], "c": key[2], "d": key[3], **data}
                     )
-        return pd.DataFrame(records)
+        return records
 
     def close(self):
         """Close the database."""

@@ -2,7 +2,6 @@ import functools
 import os
 from collections.abc import Callable, Iterable
 from time import sleep
-from typing import Optional
 
 import numpy as np
 from safetensors.numpy import load_file, save_file
@@ -270,7 +269,7 @@ class Error400(Exception):
     pass
 
 
-def retry(max_tries=None, wait=None, validator: Optional[Callable] = None):
+def retry(max_tries=None, wait=None, validator: Callable | None = None):
     """Args max_tries and wait defined as class attributes have higher precedence."""
 
     def decorator(func):
