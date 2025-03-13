@@ -2,9 +2,10 @@ import io
 import logging
 import os
 import sys
+from collections.abc import Callable
 from contextlib import redirect_stdout
 from datetime import datetime
-from typing import Callable, Literal
+from typing import Literal
 
 
 class CFGClass:

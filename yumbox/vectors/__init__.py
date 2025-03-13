@@ -1,10 +1,12 @@
+from collections.abc import Callable
+
 import numpy as np
 import pandas as pd
 import torch
 from tqdm import tqdm
 
 
-def topk(search_func: callable, queries: np.ndarray, k, is_faiss_kmeans_index=False):
+def topk(search_func: Callable, queries: np.ndarray, k, is_faiss_kmeans_index=False):
     nn_d = []
     nn = []
     batch_size = 512

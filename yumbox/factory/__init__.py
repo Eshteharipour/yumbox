@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 
-from .faiss_indexes import *
+from .faiss_indexes import FaissIndexBuilder
 
 
 def pca(features: np.ndarray, n_components=128):
