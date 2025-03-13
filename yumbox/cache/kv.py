@@ -1,4 +1,5 @@
 import os
+import uuid
 
 import lmdb
 import msgpack
@@ -18,7 +19,7 @@ class LMDBMultiIndex:
         self.db_path = os.path.join(folder, db_name)
 
         self.env: Environment = lmdb.open(self.db_path, map_size=map_size, lock=False)
-        self.data_prefix = b"data:"  # Namespace for actual data
+        self.data_prefix = b"\t$DATA\t"  # Namespace for actual data
 
     def _data_id_to_bytes(self, data_id: str) -> bytes:
         """Convert data ID to bytes."""
@@ -49,12 +50,12 @@ class LMDBMultiIndex:
             if txn.get(key_bytes):
                 raise ValueError(f"Key {key} already exists")
 
-            # If no data_id provided, generate a new one
+            # If no data_id provided, generate a new UUID
             if data_id is None:
-                data_id = os.urandom(16).hex()  # 16-byte random ID
+                data_id = str(uuid.uuid4())
             data_id_bytes = self._data_id_to_bytes(data_id)
 
-            # Store the data if it doesn’t exist
+            # Store the data if it doesn't exist
             if not txn.get(data_id_bytes):
                 txn.put(data_id_bytes, msgpack.packb(data))
 
@@ -99,88 +100,94 @@ class LMDBMultiIndex:
                     return msgpack.unpackb(data_bytes, raw=False)
         return None
 
-    def get_dataset(self) -> dict[str, dict]:
+    def get_dataset(self, mode: str = "unique") -> dict:
         """
         Export database to a dictionary, with options to handle duplicate values.
-        Two approaches are provided:
-        1. Group keys by data_id (returns dict of data with lists of keys)
-        2. Return unique data values with one representative key
+
+        :param mode: How to handle data with multiple keys:
+            - "unique": Return unique data values with one representative key (default)
+            - "grouped": Group keys by data_id (returns dict of data with lists of keys)
+            - "all": Return all keys with their data (including duplicates)
+        :return: Dictionary of data in the requested format
         """
+        if mode == "grouped":
+            return self._get_grouped_by_data()
+        elif mode == "all":
+            return self._get_all_data()
+        else:  # Default to unique
+            return self._get_unique_data()
 
-        # Option 1: Group by data_id (keys sharing same data)
-        def get_grouped_by_data():
-            grouped_data = {}  # data_id -> (data, [keys])
-            with self.env.begin() as txn:
-                cursor = txn.cursor()
-                # First pass: collect all key -> data_id mappings
-                key_to_data_id = {}
-                for key_bytes, value_bytes in cursor:
-                    if key_bytes.startswith(self.data_prefix):
-                        continue  # Skip data entries
-                    key = key_bytes.decode()
-                    data_id = value_bytes.decode()
-                    key_to_data_id[key] = data_id
+    def _get_grouped_by_data(self):
+        """Group keys by data_id (keys sharing same data)."""
+        grouped_data = {}  # data_id -> (data, [keys])
+        with self.env.begin() as txn:
+            cursor = txn.cursor()
+            # First pass: collect all key -> data_id mappings
+            key_to_data_id = {}
+            for key_bytes, value_bytes in cursor:
+                if key_bytes.startswith(self.data_prefix):
+                    continue  # Skip data entries
+                key = key_bytes.decode()
+                data_id = value_bytes.decode()
+                key_to_data_id[key] = data_id
 
-                    # Initialize the group for this data_id if it doesn't exist
-                    if data_id not in grouped_data:
-                        data_id_bytes = self._data_id_to_bytes(data_id)
-                        data_bytes = txn.get(data_id_bytes)
-                        if data_bytes:
-                            data = msgpack.unpackb(data_bytes, raw=False)
-                            grouped_data[data_id] = (data, [])
+                # Initialize the group for this data_id if it doesn't exist
+                if data_id not in grouped_data:
+                    data_id_bytes = self._data_id_to_bytes(data_id)
+                    data_bytes = txn.get(data_id_bytes)
+                    if data_bytes:
+                        data = msgpack.unpackb(data_bytes, raw=False)
+                        grouped_data[data_id] = (data, [])
 
-                # Second pass: group keys by data_id
-                for key, data_id in key_to_data_id.items():
-                    if data_id in grouped_data:
-                        grouped_data[data_id][1].append(key)
+            # Second pass: group keys by data_id
+            for key, data_id in key_to_data_id.items():
+                if data_id in grouped_data:
+                    grouped_data[data_id][1].append(key)
 
-            # Transform to more usable format
-            result = {}
-            for data_id, (data, keys) in grouped_data.items():
-                result[data_id] = {"data": data, "keys": keys}
-            return result
+        # Transform to more usable format
+        result = {}
+        for data_id, (data, keys) in grouped_data.items():
+            result[data_id] = {"data": data, "keys": keys}
+        return result
 
-        # Option 2: Return unique data with one representative key
-        def get_unique_data():
-            records = {}
-            seen_data_ids = set()
-            with self.env.begin() as txn:
-                cursor = txn.cursor()
-                for key_bytes, value_bytes in cursor:
-                    if key_bytes.startswith(self.data_prefix):
-                        continue  # Skip data entries
-                    key = key_bytes.decode()
-                    data_id = value_bytes.decode()
+    def _get_unique_data(self):
+        """Return unique data values with one representative key."""
+        records = {}
+        seen_data_ids = set()
+        with self.env.begin() as txn:
+            cursor = txn.cursor()
+            for key_bytes, value_bytes in cursor:
+                if key_bytes.startswith(self.data_prefix):
+                    continue  # Skip data entries
+                key = key_bytes.decode()
+                data_id = value_bytes.decode()
 
-                    # Only process each data_id once
-                    if data_id not in seen_data_ids:
-                        seen_data_ids.add(data_id)
-                        data_id_bytes = self._data_id_to_bytes(data_id)
-                        data_bytes = txn.get(data_id_bytes)
-                        if data_bytes:
-                            data = msgpack.unpackb(data_bytes, raw=False)
-                            records[key] = data
-            return records
-
-        # Original implementation (returns all keys with their data)
-        def get_all_data():
-            records = {}
-            with self.env.begin() as txn:
-                cursor = txn.cursor()
-                for key_bytes, value_bytes in cursor:
-                    if key_bytes.startswith(self.data_prefix):
-                        continue  # Skip data entries
-                    key = key_bytes.decode()
-                    data_id = value_bytes.decode()
+                # Only process each data_id once
+                if data_id not in seen_data_ids:
+                    seen_data_ids.add(data_id)
                     data_id_bytes = self._data_id_to_bytes(data_id)
                     data_bytes = txn.get(data_id_bytes)
                     if data_bytes:
                         data = msgpack.unpackb(data_bytes, raw=False)
                         records[key] = data
-            return records
+        return records
 
-        # Default to the unique data approach
-        return get_unique_data()
+    def _get_all_data(self):
+        """Return all keys with their data (including duplicates)."""
+        records = {}
+        with self.env.begin() as txn:
+            cursor = txn.cursor()
+            for key_bytes, value_bytes in cursor:
+                if key_bytes.startswith(self.data_prefix):
+                    continue  # Skip data entries
+                key = key_bytes.decode()
+                data_id = value_bytes.decode()
+                data_id_bytes = self._data_id_to_bytes(data_id)
+                data_bytes = txn.get(data_id_bytes)
+                if data_bytes:
+                    data = msgpack.unpackb(data_bytes, raw=False)
+                    records[key] = data
+        return records
 
     def close(self):
         """Close the database."""
