@@ -9,7 +9,7 @@ from safetensors.numpy import load_file, save_file
 from yumbox.config import BFG
 
 from .fs import *
-from .kv import LMDB_API
+from .kv import LMDB, LMDBMultiIndex
 
 # TODO: fix safe_save_kw
 
