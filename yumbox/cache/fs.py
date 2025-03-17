@@ -2,10 +2,14 @@ import errno
 import functools
 import os
 import pickle
+import random
 import shutil
 import tempfile
 import time
 from collections.abc import Callable
+
+import numpy as np
+from PIL import Image
 
 from yumbox.config import BFG
 
@@ -23,6 +27,7 @@ __all__ = [
     "safe_ropen_fd",
     "safe_wpickle",
     "safe_rpickle",
+    "FSImage",
 ]
 
 
@@ -224,3 +229,40 @@ def safe_rpickle(path: str):
     return safe_ropen(path, pickle.load, "rb")
     # with open(path, "rb") as fd:
     #     return pickle.load(fd)
+
+
+class FSImage:
+    def __init__(self, data_dirs: list[str]):
+        self.images = []
+        for path in data_dirs:
+            self.images.extend(self.build_files_list(path))
+
+    def build_files_list(self, path: str) -> list[str]:
+        walk = os.walk(path)
+        all_files = []
+        for parent, dirs, files in walk:
+            files = [os.path.join(parent, f) for f in files]
+            all_files.extend(files)
+        return all_files
+
+    def _get_seed(self, seed: int | None = 362):
+        if seed == None:
+            seed = 362
+        return random.Random(seed)
+
+    def _read_img(self, path):
+        return np.array(Image.open(path).convert("RGB"))
+
+    def get_random(self, seed=None):
+        state = self._get_seed(seed)
+        img = state.choice(self.images)
+        return self._read_img(img)
+
+    def get_one_image(self, seed=362):
+        return self.get_random(seed)
+
+    def get_ten_images(self, seed=362):
+        images = []
+        for i in range(0, 10):
+            images.append(self.get_random(seed))
+        return images

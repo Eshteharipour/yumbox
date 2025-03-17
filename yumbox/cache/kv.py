@@ -195,7 +195,7 @@ class LMDBMultiIndex:
 
 
 class LMDB:
-    def __init__(self, db_name: str, folder: str, map_size: int = 10485760):
+    def __init__(self, db_name: str, folder: str, map_size: int = 2**30):
         """
         Initialize LMDB database.
         :param db_name: Name of the database (e.g., "mydata").
