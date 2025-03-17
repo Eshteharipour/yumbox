@@ -18,6 +18,8 @@ dependencies = [
     "tqdm",
     "pillow",
     "safetensors",
+    "lmdb",
+    "msgpack",
 ]
 
 [project.optional-dependencies]
