@@ -11,7 +11,7 @@ from yumbox.config import BFG
 from .fs import *
 from .kv import LMDB, LMDBMultiIndex
 
-# TODO: fix safe_save_kw
+# TODO: fix safe_save_kw keys= values=
 
 
 def cache(func):
@@ -280,10 +280,8 @@ def retry(max_tries=None, wait=None, validator: Callable | None = None):
             self = args[0] if len(args) else None
             tries = coalesce(max_tries, getattr(self, "max_tries", None), 5)
             delay = coalesce(wait, getattr(self, "wait", None), 3)
-            if tries == 0:
-                tries = 1
             exception = None
-            for retry in range(0, tries):
+            for retry in range(-1, tries):
                 response = {"status": "error", "error": {"message": str(exception)}}
                 try:
                     response = func(*args, **kwargs)
@@ -321,7 +319,6 @@ def last_offset(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         cache_dir = BFG["cache_dir"]
-        offset_cache_dir = cache_dir
         logger = BFG["logger"]
 
         func_kwargs = []
@@ -330,7 +327,10 @@ def last_offset(func):
                 func_kwargs.append(f"{k}-{v}")
         func_kwargs = " ".join(func_kwargs)
 
-        cache_func_name = func.__name__
+        if func_kwargs:
+            cache_func_name = func.__name__ + "_" + func_kwargs
+        else:
+            cache_func_name = func.__name__
         cache_file = ""
         if cache_dir:
             cache_file = os.path.join(cache_dir, cache_func_name)
@@ -350,14 +350,12 @@ def last_offset(func):
         else:
             offset_func_name = func.__name__ + "_" + last_offset.__name__
         offset_cache_file = ""
-        if offset_cache_dir:
-            offset_cache_file = os.path.join(offset_cache_dir, offset_func_name)
+        if cache_dir:
+            offset_cache_file = os.path.join(cache_dir, offset_func_name)
             offset_cache_file += ".txt"
 
-        if offset_cache_dir and os.path.isfile(offset_cache_file):
-            logger.info(
-                f"Loading offset for {offset_func_name} from {offset_cache_dir}"
-            )
+        if cache_dir and os.path.isfile(offset_cache_file):
+            logger.info(f"Loading offset for {offset_func_name} from {cache_dir}")
             offset = safe_ropen_fd(offset_cache_file, "readline", "r").strip()
             try:
                 offset = int(offset)
@@ -390,14 +388,13 @@ def last_offset(func):
         # Normalize offset
         offset = offset * limit
 
-        if offset_cache_dir:
-            logger.info(f"Saving offset for {offset_func_name} to {offset_cache_dir}")
+        if cache_dir:
+            logger.info(f"Saving offset for {offset_func_name} to {cache_dir}")
             safe_wopen_fd(offset_cache_file, str(offset), "w")
             # with open(offset_cache_file, "w") as fd:
             #     fd.write(str(offset))
             logger.info(f"Saved offset!")
 
-        if cache_dir:
             logger.info(f"Saving cache for {cache_func_name} to {cache_dir}")
             safe_wpickle(cache_file, output)
             # with open(cache_file, "wb") as fd:
