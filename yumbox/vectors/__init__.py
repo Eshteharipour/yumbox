@@ -6,7 +6,9 @@ import torch
 from tqdm import tqdm
 
 
-def topk(search_func: Callable, queries: np.ndarray, k, is_faiss_kmeans_index=False):
+def topk(
+    search_func: Callable, queries: np.ndarray, k: int, is_faiss_kmeans_index=False
+):
     nn_d = []
     nn = []
     batch_size = 512
@@ -19,8 +21,8 @@ def topk(search_func: Callable, queries: np.ndarray, k, is_faiss_kmeans_index=Fa
         nn.append(indices)
 
     if (k == 1 or queries.squeeze().ndim == 1) and is_faiss_kmeans_index == False:
-        nn_d = np.array(nn_d).flatten()
-        nn = np.array(nn).flatten()
+        nn_d = np.concatenate(nn_d).flatten()
+        nn = np.concatenate(nn).flatten()
     else:
         nn_d = np.concatenate(nn_d)
         nn = np.concatenate(nn)
