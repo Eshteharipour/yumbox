@@ -375,3 +375,22 @@ def join_defaultname(a: defaultname, b: defaultname):
 
 def batch_defaultname(defaults: Iterable, alts: Iterable, num_workers: int):
     pass
+
+
+def replace_fromstart(haystack: str, needle: str, replace=""):
+    """Replace needle with replace if haystack starts with needle.
+
+    Faster than Regex.
+
+    Args:
+        haystack (str): string
+        needle (str): search
+        replace (str): replacement (optional, strips needle if not provided)
+
+    Returns:
+        str: replaced string or itself if haystack does not start with needle.
+    """
+
+    if haystack.startswith(needle):
+        return replace + haystack[len(needle) :]
+    return haystack

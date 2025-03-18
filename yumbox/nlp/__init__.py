@@ -13,7 +13,7 @@ from lxml import etree
 from parsel import Selector
 from tqdm import tqdm
 
-from .tools import MapRed, defaultname
+from .tools import MapRed, defaultname, replace_fromstart
 
 
 def init_nltk():

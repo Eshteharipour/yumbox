@@ -1,5 +1,6 @@
 import errno
 import functools
+import mimetypes
 import os
 import pickle
 import random
@@ -12,6 +13,7 @@ import numpy as np
 from PIL import Image
 
 from yumbox.config import BFG
+from yumbox.nlp import replace_fromstart
 
 __all__ = [
     "retry_on_lock",
@@ -232,17 +234,61 @@ def safe_rpickle(path: str):
 
 
 class FSImage:
-    def __init__(self, data_dirs: list[str]):
-        self.images = []
-        for path in data_dirs:
-            self.images.extend(self.build_files_list(path))
+    def __init__(
+        self,
+        data_dirs: list[str],
+        exts: list[str] | str | None = None,
+        depth=0,
+    ):
+        """Initialize an FSImage object to manage and retrieve image files from specified directories.
 
-    def build_files_list(self, path: str) -> list[str]:
+        Args:
+            data_dirs (list[str]): A list of directory paths to search for image files.
+            exts (list[str] | str | None, optional): File extensions or MIME type prefix to filter images by.
+                Can be a single string (e.g. 'image' for all image MIME types), a list of strings
+                (e.g., ['.jpg', '.png']), or None to include all files. Defaults to None.
+            depth (int, optional): Maximum directory depth to search for images. A depth of 0 means no limit,
+                1 means only the top-level directory, 2 includes one level of subdirectories, etc. Defaults to 0.
+        """
+
+        mimetypes.init()
+        exts = [
+            ext
+            for ext, mime in mimetypes.types_map.items()
+            if mime.startswith(f"{exts}/")
+        ]
+        if exts is None:
+            exts = ["." + e if not e.startswith(".") else e for e in exts]
+
+        self.exts = exts
+        self.data_dirs = data_dirs
+        self.depth = depth
+
+        self.images = []
+        for path in self.data_dirs:
+            self.images.extend(self.build_files_list(path, self.exts, self.depth))
+
+    def __repr__(self):
+        return (
+            f"FSImage(data_dirs={self.data_dirs}, exts={self.exts}, depth={self.depth})"
+        )
+
+    def build_files_list(self, path: str, exts: list[str], depth: int) -> list[str]:
         walk = os.walk(path)
         all_files = []
         for parent, dirs, files in walk:
             files = [os.path.join(parent, f) for f in files]
             all_files.extend(files)
+        all_files = [
+            f
+            for f in all_files
+            if (
+                (len(replace_fromstart(f, path).split(os.path.sep)) < depth + 1)
+                if depth
+                else True
+            )
+            and ((ext := os.path.splitext(f)[1]) in exts or ext == "" if exts else True)
+        ]
         return all_files
 
     def _get_seed(self, seed: int | None = 362):
