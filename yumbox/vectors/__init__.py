@@ -13,7 +13,7 @@ def topk(
     nn = []
     batch_size = 512
 
-    for i in tqdm(range(0, len(queries), batch_size)):
+    for i in tqdm(range(0, queries.shape[0], batch_size)):
         batch = queries[i : i + batch_size]
         distances, indices = search_func(batch, k=k)
 
@@ -37,8 +37,16 @@ def id2label(
     label_col: str,
     confidence: float,
 ):
+    if hasattr(nn[0], "__iter__"):
+        k = len(nn[0])
+    else:
+        k = 1
+
     index2label = dict(zip(df.index, df[label_col]))
-    predictions = np.array([index2label[index] for index in nn])
+    if k == 1:
+        predictions = np.array([index2label[index] for index in nn])
+    else:
+        predictions = np.array([[index2label[index] for index in topk] for topk in nn])
     if confidence:
         certain = nn_d >= confidence
         predictions = np.where(certain, predictions, "-1")
