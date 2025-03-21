@@ -267,12 +267,12 @@ class defaultname:
         new_default_found = False
         new_alt_found = False
 
-        default = self._search(new_default)
+        default = self.search(new_default)
         if default:
             new_default_found = True
             new_default = default
 
-        default = self._search(new_alt)
+        default = self.search(new_alt)
         if default:
             new_alt_found = True
             new_alt = default
@@ -319,11 +319,11 @@ class defaultname:
 
     def _backref_search(self, index: str):
         """Find backreferences which is default to alternate names.
-        Not used."""
+        Not used. Can be used to check if name is a default or not."""
 
         return self._backref_dict[index]
 
-    def _search(self, index: str):
+    def search(self, index: str):
         """Searches dict for key, returns default name if found."""
 
         # Major bug fix: we don't set default -> default in _dict so we need to search in:
@@ -342,7 +342,7 @@ class defaultname:
         if not isinstance(index, str):
             raise ValueError("Index is not str!")
 
-        default = self._search(index)
+        default = self.search(index)
         if default:
             return default
         else:
