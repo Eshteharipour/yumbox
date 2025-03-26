@@ -7,11 +7,20 @@ from tqdm import tqdm
 
 
 def topk(
-    search_func: Callable, queries: np.ndarray, k: int, is_faiss_kmeans_index=False
+    search_func: Callable,
+    queries: np.ndarray,
+    k: int,
+    keepdims=False,
+    search_size: int | None = None,
 ):
+    # keepdims: for faiss kmeans clusters topk, pass keepdims=True
+    # renamed is_faiss_kmeans_index arg to keepdims
+
     nn_d = []
     nn = []
     batch_size = 512
+    if search_size:
+        batch_size = search_size // k
 
     for i in tqdm(range(0, queries.shape[0], batch_size)):
         batch = queries[i : i + batch_size]
@@ -20,7 +29,7 @@ def topk(
         nn_d.append(distances)
         nn.append(indices)
 
-    if (k == 1 or queries.squeeze().ndim == 1) and is_faiss_kmeans_index == False:
+    if (k == 1 or queries.squeeze().ndim == 1) and keepdims == False:
         nn_d = np.concatenate(nn_d).flatten()
         nn = np.concatenate(nn).flatten()
     else:
@@ -90,13 +99,67 @@ def normalize_vector(v: np.ndarray | torch.Tensor):
 def full_feats(
     df: pd.DataFrame, feats: dict[str, np.ndarray], colname: str
 ) -> dict[str, np.ndarray]:
+    # colname is id col
     return {x: feats[x] for x in df[colname].values}
 
 
 def partial_feats(
     df: pd.DataFrame, feats: dict[str, np.ndarray], colname: str
 ) -> dict[str, np.ndarray]:
+    # colname is id col
     return {x: feats[x] for x in df[colname].values if bool(x) and pd.notna(x)}
+
+
+def sum_feats(
+    df: pd.DataFrame,
+    feats_a: dict[str, np.ndarray],
+    feats_b: dict[str, np.ndarray],
+    colname_a: str,
+    colname_b: str,
+) -> dict[str, np.ndarray]:
+    # colname_a is id col for feats_a
+    # colname_b is id col for feats_b
+    return np.array(
+        # expects feats_a to not have missing values
+        # (
+        #     feats_a[r[colname_a]] + feats_b[r[colname_b]]
+        #     if (bool(r[colname_b]) and pd.notna(r[colname_b]))
+        #     else feats_a[r[colname_a]]
+        # )
+        # checks for value on both feats_a and feats_b
+        [
+            (
+                feats_a[r[colname_a]] + feats_b[r[colname_b]]
+                if (
+                    bool(r[colname_a])
+                    and pd.notna(r[colname_a])
+                    and bool(r[colname_b])
+                    and pd.notna(r[colname_b])
+                )
+                else (
+                    feats_a[r[colname_a]]
+                    if (bool(r[colname_a]) and pd.notna(r[colname_a]))
+                    else feats_b[r[colname_b]]
+                )
+            )
+            for _, r in df.iterrows()
+        ]
+    )
+
+
+def cat_feats(
+    df: pd.DataFrame,
+    feats_a: dict[str, np.ndarray],
+    feats_b: dict[str, np.ndarray],
+    colname_a: str,
+    colname_b: str,
+) -> dict[str, np.ndarray]:
+    # colname_a is id col for feats_a
+    # colname_b is id col for feats_b
+    # expects feats_a and feats_b to not have missing values
+    return np.concatenate(
+        np.array(feats_a[r[colname_a]], feats_b[r[colname_b]]) for _, r in df.iterrows()
+    )
 
 
 def reconstruct_original_index(
