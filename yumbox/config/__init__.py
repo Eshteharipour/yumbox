@@ -5,19 +5,35 @@ import sys
 from collections.abc import Callable
 from contextlib import redirect_stdout
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Union, overload
 
 
 class CFGClass:
     def __init__(self):
-        self.cfg = {"logger": logging.getLogger(), "cache_dir": None}
+        self.cfg: dict[
+            Literal["logger", "cache_dir"], Union[logging.Logger, str, None]
+        ] = {"logger": logging.getLogger(), "cache_dir": None}
 
-    def __getitem__(self, index: Literal["logger", "cache_dir"]):
+    @overload
+    def __getitem__(self, index: Literal["logger"]) -> logging.Logger: ...
+    @overload
+    def __getitem__(self, index: Literal["cache_dir"]) -> str | None: ...
+    def __getitem__(
+        self, index: Literal["logger", "cache_dir"]
+    ) -> Union[logging.Logger, str, None]:
         return self.cfg[index]
 
+    @overload
+    def __setitem__(self, index: Literal["logger"], value: logging.Logger) -> None: ...
+    @overload
     def __setitem__(
-        self, index: Literal["logger", "cache_dir"], value: str | logging.Logger
-    ):
+        self, index: Literal["cache_dir"], value: Union[str, None]
+    ) -> None: ...
+    def __setitem__(
+        self,
+        index: Literal["logger", "cache_dir"],
+        value: Union[logging.Logger, str, None],
+    ) -> None:
         if value:
             if index == "cache_dir":
                 os.makedirs(value, exist_ok=True)
@@ -25,9 +41,6 @@ class CFGClass:
 
 
 BFG = CFGClass()
-
-
-_streams = {"stdout": sys.stdout}
 
 
 class CustomFormatter(logging.Formatter):
@@ -60,18 +73,16 @@ class CustomFormatter(logging.Formatter):
 
 
 def setup_logger(name, level=logging.INFO, path="", stream="stdout"):
+    # stream arg is deprecated and kept for backwards compatibility
+
     logger = logging.getLogger(name)
     if logger.hasHandlers():
         return logger
     global _streams
-    if stream not in _streams:
-        log_folder = os.path.dirname(stream)
-        os.makedirs(log_folder, exist_ok=True)
-        _streams[stream] = open(stream, "w")
     logger.propagate = False
     logger.setLevel(level)
 
-    sh = logging.StreamHandler(stream=_streams[stream])
+    sh = logging.StreamHandler(stream=sys.stdout)
     sh.setLevel(level)
     sh.setFormatter(CustomFormatter())
     logger.addHandler(sh)
