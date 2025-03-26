@@ -278,8 +278,8 @@ def retry(max_tries=None, wait=None, validator: Callable | None = None):
             logger = BFG["logger"]
 
             self = args[0] if len(args) else None
-            tries = coalesce(max_tries, getattr(self, "max_tries", None), 5)
-            delay = coalesce(wait, getattr(self, "wait", None), 3)
+            tries = coalesce(max_tries, getattr(self, "max_tries", None), 0)
+            delay = coalesce(wait, getattr(self, "wait", None), 0)
             exception = None
             for retry in range(-1, tries):
                 response = {"status": "error", "error": {"message": str(exception)}}
