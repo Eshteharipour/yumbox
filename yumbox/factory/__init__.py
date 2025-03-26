@@ -33,7 +33,7 @@ def kmeans_faiss(features: np.ndarray, ncentroids=1024, niter=20, verbose=False)
     return kmeans
 
 
-def build_index(features: np.ndarray):
+def build_index(features: np.ndarray, dtype=None):
     import faiss
 
     batch_size = 32 * 16
@@ -51,6 +51,8 @@ def build_index(features: np.ndarray):
     #     index.add(batch)
 
     # Add to index in one go
+    if dtype:
+        features = features.astype(dtype)
     index.add(features)
 
     return index
