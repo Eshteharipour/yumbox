@@ -269,7 +269,17 @@ class Error400(Exception):
     pass
 
 
-def retry(max_tries=None, wait=None, validator: Callable | None = None):
+class ValidationError(Exception):
+    pass
+
+
+def retry(
+    max_tries=None,
+    wait=None,
+    validator: Callable | None = None,
+    return_exception=True,
+    retry_on400=False,
+):
     """Args max_tries and wait defined as class attributes have higher precedence."""
 
     def decorator(func):
@@ -280,33 +290,47 @@ def retry(max_tries=None, wait=None, validator: Callable | None = None):
             self = args[0] if len(args) else None
             tries = coalesce(max_tries, getattr(self, "max_tries", None), 0)
             delay = coalesce(wait, getattr(self, "wait", None), 0)
-            exception = None
+            response = {}
             for retry in range(-1, tries):
-                response = {"status": "error", "error": {"message": str(exception)}}
                 try:
                     response = func(*args, **kwargs)
                     if validator:
                         validator(*args, **kwargs, response=response)
                     break
                 except Error400 as e:
-                    exception = e
-                    logger.error(f"Exception {e} occured.")
+                    if return_exception:
+                        response = {"status": "error", "error": {"message": str(e)}}
+                    logger.error(f"400 Exception occured. Error: {e}")
                     logger.error(f"Args: {args}")
                     logger.error(f"KWArgs: {kwargs}")
-                    break
-                except Exception as e:
-                    exception = e
+                    if retry_on400 == False:
+                        break
+                except ValidationError as e:
+                    if return_exception:
+                        response = {"status": "error", "error": {"message": str(e)}}
                     if retry + 1 < tries:
                         import traceback
 
                         logger.warning(
-                            f"Exception {e} occured, retrying {retry+1}/{tries}"
+                            f"Validation error occured, retrying {retry+1}/{tries}. Error: {e}"
                         )
                         logger.warning(traceback.format_exc())
                         logger.warning(f"Args: {args}")
                         logger.warning(f"KWArgs: {kwargs}")
                         sleep(delay)
-                    continue
+                except Exception as e:
+                    if return_exception:
+                        response = {"status": "error", "error": {"message": str(e)}}
+                    if retry + 1 < tries:
+                        import traceback
+
+                        logger.warning(
+                            f"Exception occured, retrying {retry+1}/{tries}. Error: {e}"
+                        )
+                        logger.warning(traceback.format_exc())
+                        logger.warning(f"Args: {args}")
+                        logger.warning(f"KWArgs: {kwargs}")
+                        sleep(delay)
 
             return response
 
