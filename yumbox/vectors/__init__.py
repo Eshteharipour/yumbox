@@ -1,4 +1,5 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -96,18 +97,24 @@ def normalize_vector(v: np.ndarray | torch.Tensor):
         raise ValueError(f"Expected Numpy Array or Pytorch Tensor, got {type(v)}")
 
 
-def full_feats(
+def notfona(x):
+    if bool(x) and pd.notna(x):
+        return True
+    return False
+
+
+def full_featdict(
     df: pd.DataFrame, feats: dict[str, np.ndarray], colname: str
 ) -> dict[str, np.ndarray]:
     # colname is id col
     return {x: feats[x] for x in df[colname].values}
 
 
-def partial_feats(
+def partial_featdict(
     df: pd.DataFrame, feats: dict[str, np.ndarray], colname: str
 ) -> dict[str, np.ndarray]:
     # colname is id col
-    return {x: feats[x] for x in df[colname].values if bool(x) and pd.notna(x)}
+    return {x: feats[x] for x in df[colname].values if notfona(x)}
 
 
 def sum_feats(
@@ -116,35 +123,48 @@ def sum_feats(
     feats_b: dict[str, np.ndarray],
     colname_a: str,
     colname_b: str,
+    normalize: Literal["before", "after", None] = None,
 ) -> dict[str, np.ndarray]:
     # colname_a is id col for feats_a
     # colname_b is id col for feats_b
-    return np.array(
-        # expects feats_a to not have missing values
-        # (
-        #     feats_a[r[colname_a]] + feats_b[r[colname_b]]
-        #     if (bool(r[colname_b]) and pd.notna(r[colname_b]))
-        #     else feats_a[r[colname_a]]
-        # )
-        # checks for value on both feats_a and feats_b
-        [
-            (
-                feats_a[r[colname_a]] + feats_b[r[colname_b]]
-                if (
-                    bool(r[colname_a])
-                    and pd.notna(r[colname_a])
-                    and bool(r[colname_b])
-                    and pd.notna(r[colname_b])
+    # allows missing value on either col a or col b
+    if normalize == None or normalize == "after":
+        x = np.array(
+            [
+                (
+                    feats_a[r[colname_a]] + feats_b[r[colname_b]]
+                    if (notfona(r[colname_a]) and notfona(r[colname_b]))
+                    else (
+                        feats_a[r[colname_a]]
+                        if (notfona(r[colname_a]))
+                        else feats_b[r[colname_b]]
+                    )
                 )
-                else (
-                    feats_a[r[colname_a]]
-                    if (bool(r[colname_a]) and pd.notna(r[colname_a]))
-                    else feats_b[r[colname_b]]
+                for _, r in df.iterrows()
+            ]
+        )
+        if normalize == None:
+            return x
+        else:
+            return normalize_vector(x)
+    elif normalize == "before":
+        return np.array(
+            [
+                (
+                    normalize_vector(feats_a[r[colname_a]])
+                    + normalize_vector(feats_b[r[colname_b]])
+                    if (notfona(r[colname_a]) and notfona(r[colname_b]))
+                    else (
+                        normalize_vector(feats_a[r[colname_a]])
+                        if (notfona(r[colname_a]))
+                        else normalize_vector(feats_b[r[colname_b]])
+                    )
                 )
-            )
-            for _, r in df.iterrows()
-        ]
-    )
+                for _, r in df.iterrows()
+            ]
+        )
+    else:
+        ValueError(normalize)
 
 
 def cat_feats(
@@ -153,13 +173,97 @@ def cat_feats(
     feats_b: dict[str, np.ndarray],
     colname_a: str,
     colname_b: str,
+    zeros_a: int | None = None,
+    zeros_b: int | None = None,
+    normalize: Literal["before", "after", None] = None,
+    pca: Callable = lambda x: x,
 ) -> dict[str, np.ndarray]:
     # colname_a is id col for feats_a
     # colname_b is id col for feats_b
-    # expects feats_a and feats_b to not have missing values
-    return np.concatenate(
-        np.array(feats_a[r[colname_a]], feats_b[r[colname_b]]) for _, r in df.iterrows()
-    )
+    # expects feats_a and feats_b to not have missing values if fill_size not provided
+    if zeros_a == None and zeros_b == None:
+        if normalize == None or normalize_vector == "after":
+            x = np.concatenate(
+                np.array([pca(feats_a[r[colname_a]]), pca(feats_b[r[colname_b]])])
+                for _, r in df.iterrows()
+            )
+            if normalize == None:
+                return x
+            else:
+                return normalize_vector(x)
+        elif normalize == "before":
+            return np.concatenate(
+                np.array(
+                    [
+                        pca(normalize_vector(feats_a[r[colname_a]])),
+                        pca(normalize_vector(feats_b[r[colname_b]])),
+                    ]
+                )
+                for _, r in df.iterrows()
+            )
+        else:
+            ValueError(normalize)
+    else:
+        if normalize == None or normalize == "after":
+            x = np.concatenate(
+                [
+                    (
+                        [pca(feats_a[r[colname_a]]), pca(feats_b[r[colname_b]])]
+                        if (notfona(r[colname_a]) and notfona(r[colname_b]))
+                        else (
+                            [
+                                pca(feats_a[r[colname_a]]),
+                                zeros_b,
+                            ]
+                            if (notfona(r[colname_a]))
+                            else [
+                                zeros_a,
+                                pca(feats_b[r[colname_b]]),
+                            ]
+                        )
+                    )
+                    for _, r in df.iterrows()
+                ]
+            )
+            if normalize == None:
+                return x
+            else:
+                return normalize_vector(x)
+        elif normalize == "before":
+            return np.concatenate(
+                [
+                    (
+                        [
+                            pca(normalize_vector(feats_a[r[colname_a]])),
+                            pca(normalize_vector(feats_b[r[colname_b]])),
+                        ]
+                        if (notfona(r[colname_a]) and notfona(r[colname_b]))
+                        else (
+                            [
+                                pca(normalize_vector(feats_a[r[colname_a]])),
+                                zeros_b,
+                            ]
+                            if (notfona(r[colname_a]))
+                            else [
+                                zeros_a,
+                                pca(normalize_vector(feats_b[r[colname_b]])),
+                            ]
+                        )
+                    )
+                    for _, r in df.iterrows()
+                ]
+            )
+
+        else:
+            ValueError(normalize)
+
+
+def full_feats(keys: Iterable[str], feats: dict[str]) -> dict[str]:
+    return np.array([feats[k] for k in keys])
+
+
+def partial_feats(keys: Iterable[str], feats: dict[str]) -> dict[str]:
+    return np.array([feats[k] for k in keys if notfona(k)])
 
 
 def reconstruct_original_index(

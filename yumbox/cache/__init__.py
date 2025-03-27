@@ -500,7 +500,3 @@ def last_str_offset(func):
         return output, offset
 
     return wrapper
-
-
-def get_feats(keys: Iterable[str], feats: dict[str]) -> dict[str]:
-    return np.array([feats[k] for k in keys])
