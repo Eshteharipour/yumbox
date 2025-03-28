@@ -169,6 +169,41 @@ def np_cache(func):
     return wrapper
 
 
+def np_cache_dict(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        cache_file = ""
+        if cache_dir:
+            cache_file = os.path.join(cache_dir, func_name)
+            cache_file += ".npz"
+
+        if cache_dir and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_dir}")
+            cache = safe_load(cache_file, np.load)
+            # cache = np.load(cache_file)
+        else:
+            cache = None
+        res = func(*args, **kwargs, cache=cache, cache_file=cache_file)
+        cache = res["cache"]
+        if cache_dir:
+            logger.info(f"Saving cache for {func_name} to {cache_dir}")
+            safe_save_kw(
+                cache_file,
+                np.savez,
+                keys=list(cache.keys()),
+                values=list(cache.values()),
+            )
+            # np.savez(cache_file, keys=list(cache.keys()), values=list(cache.values()))
+            logger.info(f"Saved cache!")
+        return res
+
+    return wrapper
+
+
 def unsafe_np_cache(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
