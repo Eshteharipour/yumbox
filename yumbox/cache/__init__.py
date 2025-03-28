@@ -440,9 +440,9 @@ def last_offset(func):
         offset = offset // limit
 
         if output:
-            output = func(*args, **kwargs, offset=offset, cached_output=output)
+            output, offset = func(*args, **kwargs, offset=offset, cached_output=output)
         else:
-            output = func(*args, **kwargs, offset=offset)
+            output, offset = func(*args, **kwargs, offset=offset)
 
         # Normalize offset
         offset = offset * limit
@@ -460,7 +460,7 @@ def last_offset(func):
             #     pickle.dump(output, fd)
             logger.info(f"Saved cache!")
 
-        return output
+        return output, offset
 
     return wrapper
 
@@ -469,7 +469,6 @@ def last_str_offset(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         cache_dir = BFG["cache_dir"]
-        offset_cache_dir = cache_dir
         logger = BFG["logger"]
 
         func_kwargs = []
@@ -498,14 +497,12 @@ def last_str_offset(func):
         else:
             offset_func_name = func.__name__ + "_" + last_offset.__name__
         offset_cache_file = ""
-        if offset_cache_dir:
-            offset_cache_file = os.path.join(offset_cache_dir, offset_func_name)
+        if cache_dir:
+            offset_cache_file = os.path.join(cache_dir, offset_func_name)
             offset_cache_file += ".txt"
 
-        if offset_cache_dir and os.path.isfile(offset_cache_file):
-            logger.info(
-                f"Loading offset for {offset_func_name} from {offset_cache_dir}"
-            )
+        if cache_dir and os.path.isfile(offset_cache_file):
+            logger.info(f"Loading offset for {offset_func_name} from {cache_dir}")
             offset = str(safe_ropen_fd(offset_cache_file, "readline", "r").strip())
             # with open(offset_cache_file, "r") as fd:
             #     offset = str(fd.readline().strip())
@@ -518,8 +515,8 @@ def last_str_offset(func):
         else:
             output, offset = func(*args, **kwargs, offset=offset)
 
-        if offset_cache_dir and offset is not None:
-            logger.info(f"Saving offset for {offset_func_name} to {offset_cache_dir}")
+        if cache_dir and offset is not None:
+            logger.info(f"Saving offset for {offset_func_name} to {cache_dir}")
             safe_wopen_fd(offset_cache_file, str(offset), "w")
             # with open(offset_cache_file, "w") as fd:
             #     fd.write(str(offset))
