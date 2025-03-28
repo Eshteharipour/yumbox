@@ -223,6 +223,15 @@ class LMDB:
                 result.append(txn.get(key_bytes) is not None)
         return result
 
+    def upsert(self, key: str, data: dict) -> bool:
+        """
+        Upsert an entry.
+        :return: True if it was written.
+        """
+        with self.env.begin(write=True) as txn:
+            key_bytes = key.encode()
+            return txn.put(key_bytes, msgpack.packb(data))
+
     def create(self, key: str, data: dict) -> bool:
         """
         Create a new entry.
