@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 def topk(
     search_func: Callable,
-    queries: np.ndarray,
+    queries: np.ndarray | list,
     k: int,
     keepdims=False,
     search_size: int | None = None,
@@ -23,7 +23,7 @@ def topk(
     if search_size:
         batch_size = search_size // k
 
-    for i in tqdm(range(0, queries.shape[0], batch_size)):
+    for i in tqdm(range(0, len(queries), batch_size)):
         batch = queries[i : i + batch_size]
         distances, indices = search_func(batch, k=k)
 
