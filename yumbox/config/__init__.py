@@ -1,3 +1,4 @@
+import functools
 import io
 import logging
 import os
@@ -8,16 +9,60 @@ from datetime import datetime
 from typing import Literal, Union, overload
 
 
+class Print:
+    @functools.wraps(logging.info)
+    def info(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.warn)
+    def warn(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.warning)
+    def warning(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.error)
+    def error(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.critical)
+    def critical(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.exception)
+    def exception(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.fatal)
+    def fatal(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.debug)
+    def debug(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.log)
+    def log(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+    @functools.wraps(logging.Logger._log)
+    def _log(self, *args, **kwargs):
+        print(*args, **kwargs)
+
+
 class CFGClass:
     def __init__(self):
         self.cfg: dict[
             Literal["logger", "cache_dir"], Union[logging.Logger, str, None]
-        ] = {"logger": logging.getLogger(), "cache_dir": None}
+        ] = {"logger": Print(), "cache_dir": None}
 
     @overload
     def __getitem__(self, index: Literal["logger"]) -> logging.Logger: ...
+
     @overload
     def __getitem__(self, index: Literal["cache_dir"]) -> str | None: ...
+
     def __getitem__(
         self, index: Literal["logger", "cache_dir"]
     ) -> Union[logging.Logger, str, None]:
@@ -25,10 +70,12 @@ class CFGClass:
 
     @overload
     def __setitem__(self, index: Literal["logger"], value: logging.Logger) -> None: ...
+
     @overload
     def __setitem__(
         self, index: Literal["cache_dir"], value: Union[str, None]
     ) -> None: ...
+
     def __setitem__(
         self,
         index: Literal["logger", "cache_dir"],
