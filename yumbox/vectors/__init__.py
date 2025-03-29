@@ -17,6 +17,13 @@ def topk(
     # keepdims: for faiss kmeans clusters topk, pass keepdims=True
     # renamed is_faiss_kmeans_index arg to keepdims
 
+    if len(queries) == 1:
+        if not hasattr(queries[0], "__iter__"):
+            if isinstance(queries, np.ndarray):
+                queries = np.expand_dims(queries, axis=0)
+            else:
+                queries = [queries]
+
     nn_d = []
     nn = []
     batch_size = 512
@@ -30,7 +37,7 @@ def topk(
         nn_d.append(distances)
         nn.append(indices)
 
-    if (k == 1 or queries.squeeze().ndim == 1) and keepdims == False:
+    if keepdims == False and (k == 1 or len(queries) == 1):
         nn_d = np.concatenate(nn_d).flatten()
         nn = np.concatenate(nn).flatten()
     else:
