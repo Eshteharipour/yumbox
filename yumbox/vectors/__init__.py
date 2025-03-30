@@ -17,7 +17,13 @@ def topk(
     # keepdims: for faiss kmeans clusters topk, pass keepdims=True
     # renamed is_faiss_kmeans_index arg to keepdims
 
-    if len(queries) == 1:
+    # sparse array length issue
+    try:
+        queries_len = len(queries)
+    except TypeError:
+        queries_len = queries.shape[0]
+
+    if queries_len == 1:
         if not hasattr(queries[0], "__iter__"):
             if isinstance(queries, np.ndarray):
                 queries = np.expand_dims(queries, axis=0)
@@ -30,14 +36,14 @@ def topk(
     if search_size:
         batch_size = search_size // k
 
-    for i in tqdm(range(0, len(queries), batch_size)):
+    for i in tqdm(range(0, queries_len, batch_size)):
         batch = queries[i : i + batch_size]
         distances, indices = search_func(batch, k=k)
 
         nn_d.append(distances)
         nn.append(indices)
 
-    if keepdims == False and (k == 1 or len(queries) == 1):
+    if keepdims == False and (k == 1 or queries_len == 1):
         nn_d = np.concatenate(nn_d).flatten()
         nn = np.concatenate(nn).flatten()
     else:
