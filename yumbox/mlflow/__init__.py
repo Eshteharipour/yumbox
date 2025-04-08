@@ -10,6 +10,8 @@ from omegaconf import DictConfig, OmegaConf
 
 from yumbox.cache import BFG
 
+DATE_TIME_FORMAT = "%Y-%m-%dT%H-%M-%S%z"
+
 
 def log_params(cfg: DictConfig, prefix: str | None = None):
     """Recursively log parameters from a nested OmegaConf configuration"""
