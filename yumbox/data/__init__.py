@@ -17,7 +17,10 @@ class ImgDataset(Dataset):
         features: dict[str, np.ndarray],
         transform: Callable | None = no_op,
     ):
-        self.transform = transform
+        if transform is None:
+            self.transform = no_op
+        else:
+            self.transform = transform
 
         df_wimages = df[df[path_col].astype(bool)]
         hash2path = {}
@@ -50,8 +53,15 @@ class TextDataset(Dataset):
         preprocessor: Callable | None = no_op,
         tokenizer: Callable | None = no_op,
     ):
-        self.preprocessor = preprocessor
-        self.tokenizer = tokenizer
+        if preprocessor is None:
+            self.preprocessor = no_op
+        else:
+            self.preprocessor = preprocessor
+
+        if tokenizer is None:
+            self.tokenizer = no_op
+        else:
+            self.tokenizer = tokenizer
 
         id2text = dict(zip(df[id_col], df[text_col]))
         id2text = {k: v for k, v in id2text.items() if k and pd.notna(k)}
@@ -92,8 +102,16 @@ class TFDocumentDataset(Dataset):
         preprocessor: Callable | None = no_op,
         tokenizer: Callable | None = no_op,
     ):
-        self.preprocessor = preprocessor
-        self.tokenizer = tokenizer
+        if preprocessor is None:
+            self.preprocessor = no_op
+        else:
+            self.preprocessor = preprocessor
+
+        if tokenizer is None:
+            self.tokenizer = no_op
+        else:
+            self.tokenizer = tokenizer
+
         self.max_seq_length = max_seq_length
         self.overlap = overlap
 
