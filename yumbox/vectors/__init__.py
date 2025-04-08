@@ -6,6 +6,8 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
+no_op = lambda x: x
+
 
 def topk(
     search_func: Callable,
@@ -189,15 +191,20 @@ def cat_feats(
     zeros_a: int | None = None,
     zeros_b: int | None = None,
     normalize: Literal["before", "after", None] = None,
-    pca: Callable = lambda x: x,
+    pca_a: Callable | None = no_op,
+    pca_b: Callable | None = no_op,
 ) -> dict[str, np.ndarray]:
     # colname_a is id col for feats_a
     # colname_b is id col for feats_b
     # expects feats_a and feats_b to not have missing values if fill_size not provided
+    if pca_a is None:
+        pca_a = no_op
+    if pca_b is None:
+        pca_b = no_op
     if zeros_a == None and zeros_b == None:
         if normalize == None or normalize_vector == "after":
             x = np.concatenate(
-                np.array([pca(feats_a[r[colname_a]]), pca(feats_b[r[colname_b]])])
+                np.array([pca_a(feats_a[r[colname_a]]), pca_b(feats_b[r[colname_b]])])
                 for _, r in df.iterrows()
             )
             if normalize == None:
@@ -208,8 +215,8 @@ def cat_feats(
             return np.concatenate(
                 np.array(
                     [
-                        pca(normalize_vector(feats_a[r[colname_a]])),
-                        pca(normalize_vector(feats_b[r[colname_b]])),
+                        pca_a(normalize_vector(feats_a[r[colname_a]])),
+                        pca_b(normalize_vector(feats_b[r[colname_b]])),
                     ]
                 )
                 for _, r in df.iterrows()
@@ -221,17 +228,17 @@ def cat_feats(
             x = np.concatenate(
                 [
                     (
-                        [pca(feats_a[r[colname_a]]), pca(feats_b[r[colname_b]])]
+                        [pca_a(feats_a[r[colname_a]]), pca_b(feats_b[r[colname_b]])]
                         if (notfona(r[colname_a]) and notfona(r[colname_b]))
                         else (
                             [
-                                pca(feats_a[r[colname_a]]),
+                                pca_a(feats_a[r[colname_a]]),
                                 zeros_b,
                             ]
                             if (notfona(r[colname_a]))
                             else [
                                 zeros_a,
-                                pca(feats_b[r[colname_b]]),
+                                pca_b(feats_b[r[colname_b]]),
                             ]
                         )
                     )
@@ -247,19 +254,19 @@ def cat_feats(
                 [
                     (
                         [
-                            pca(normalize_vector(feats_a[r[colname_a]])),
-                            pca(normalize_vector(feats_b[r[colname_b]])),
+                            pca_a(normalize_vector(feats_a[r[colname_a]])),
+                            pca_b(normalize_vector(feats_b[r[colname_b]])),
                         ]
                         if (notfona(r[colname_a]) and notfona(r[colname_b]))
                         else (
                             [
-                                pca(normalize_vector(feats_a[r[colname_a]])),
+                                pca_a(normalize_vector(feats_a[r[colname_a]])),
                                 zeros_b,
                             ]
                             if (notfona(r[colname_a]))
                             else [
                                 zeros_a,
-                                pca(normalize_vector(feats_b[r[colname_b]])),
+                                pca_b(normalize_vector(feats_b[r[colname_b]])),
                             ]
                         )
                     )
