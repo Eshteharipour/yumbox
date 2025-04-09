@@ -179,7 +179,7 @@ def sum_feats(
             ]
         )
     else:
-        ValueError(normalize)
+        raise ValueError(normalize)
 
 
 def cat_feats(
@@ -224,7 +224,7 @@ def cat_feats(
                 for _, r in df.iterrows()
             )
         else:
-            ValueError(normalize)
+            raise ValueError(normalize)
     else:
         if normalize == None or normalize == "after":
             x = np.array(
@@ -265,15 +265,19 @@ def cat_feats(
                         )
                         if (notfona(r[colname_a]) and notfona(r[colname_b]))
                         else (
-                            [
-                                pca_a(normalize_vector(feats_a[r[colname_a]])),
-                                zeros_b,
-                            ]
+                            np.concatenate(
+                                [
+                                    pca_a(normalize_vector(feats_a[r[colname_a]])),
+                                    zeros_b,
+                                ]
+                            )
                             if (notfona(r[colname_a]))
-                            else [
-                                zeros_a,
-                                pca_b(normalize_vector(feats_b[r[colname_b]])),
-                            ]
+                            else np.concatenate(
+                                [
+                                    zeros_a,
+                                    pca_b(normalize_vector(feats_b[r[colname_b]])),
+                                ]
+                            )
                         )
                     )
                     for _, r in df.iterrows()
@@ -281,7 +285,7 @@ def cat_feats(
             )
 
         else:
-            ValueError(normalize)
+            raise ValueError(normalize)
 
 
 def full_feats(keys: Iterable[str], feats: dict[str]) -> dict[str]:
