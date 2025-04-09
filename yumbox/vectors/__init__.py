@@ -196,7 +196,7 @@ def cat_feats(
 ) -> dict[str, np.ndarray]:
     # colname_a is id col for feats_a
     # colname_b is id col for feats_b
-    # expects feats_a and feats_b to not have missing values if fill_size not provided
+    # expects feats_a and feats_b to not have missing values if zeros_a and zero_b not provided
     if pca_a is None:
         pca_a = no_op
     if pca_b is None:
