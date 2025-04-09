@@ -1,7 +1,9 @@
 import os
 import subprocess
+import sys
 import tempfile
 from logging import Logger
+from pathlib import Path
 from typing import Literal, Optional
 
 import mlflow
@@ -228,3 +230,14 @@ def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Ru
     #         f"Error retrieving last successful run for '{experiment_name}': {str(e)}"
     #     )
     #     return None
+
+
+def set_tracking_uri(path: str):
+    # If path is absolute
+    if path.startswith("/"):
+        mlflow.set_tracking_uri(f"file:{path}")
+    # Otherwise get parent dir of entrypoint script
+    else:
+        main_file = Path(sys.argv[0]).parent.resolve()
+        mlflow_path = os.path.join(main_file, path)
+        mlflow.set_tracking_uri(f"file:{mlflow_path}")
