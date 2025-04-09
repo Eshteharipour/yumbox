@@ -124,6 +124,7 @@ def run_all_configs(
     mode: Literal["committed", "all", "list"] = "committed",
     executable="python",
     script="main.py",
+    config_arg="-c",
     extra_args=None,
     config_mode: Literal["name", "path"] = "path",
 ):
@@ -153,7 +154,7 @@ def run_all_configs(
     for config_file in config_files:
         logger.info(f"Starting: {config_file}")
 
-        cmd = [executable, script, "-c", config_file]
+        cmd = [executable, script, config_arg, config_file]
         if extra_args:
             cmd.extend(extra_args)
 
