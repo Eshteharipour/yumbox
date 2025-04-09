@@ -203,8 +203,10 @@ def cat_feats(
         pca_b = no_op
     if zeros_a is None and zeros_b is None:
         if normalize == None or normalize_vector == "after":
-            x = np.concatenate(
-                np.array([pca_a(feats_a[r[colname_a]]), pca_b(feats_b[r[colname_b]])])
+            x = np.array(
+                np.concatenate(
+                    [pca_a(feats_a[r[colname_a]]), pca_b(feats_b[r[colname_b]])]
+                )
                 for _, r in df.iterrows()
             )
             if normalize == None:
@@ -212,8 +214,8 @@ def cat_feats(
             else:
                 return normalize_vector(x)
         elif normalize == "before":
-            return np.concatenate(
-                np.array(
+            return np.array(
+                np.concatenate(
                     [
                         pca_a(normalize_vector(feats_a[r[colname_a]])),
                         pca_b(normalize_vector(feats_b[r[colname_b]])),
@@ -225,10 +227,12 @@ def cat_feats(
             ValueError(normalize)
     else:
         if normalize == None or normalize == "after":
-            x = np.concatenate(
+            x = np.array(
                 [
                     (
-                        [pca_a(feats_a[r[colname_a]]), pca_b(feats_b[r[colname_b]])]
+                        np.concatenate(
+                            [pca_a(feats_a[r[colname_a]]), pca_b(feats_b[r[colname_b]])]
+                        )
                         if (notfona(r[colname_a]) and notfona(r[colname_b]))
                         else (
                             [
@@ -250,13 +254,15 @@ def cat_feats(
             else:
                 return normalize_vector(x)
         elif normalize == "before":
-            return np.concatenate(
+            return np.array(
                 [
                     (
-                        [
-                            pca_a(normalize_vector(feats_a[r[colname_a]])),
-                            pca_b(normalize_vector(feats_b[r[colname_b]])),
-                        ]
+                        np.concatenate(
+                            [
+                                pca_a(normalize_vector(feats_a[r[colname_a]])),
+                                pca_b(normalize_vector(feats_b[r[colname_b]])),
+                            ]
+                        )
                         if (notfona(r[colname_a]) and notfona(r[colname_b]))
                         else (
                             [
