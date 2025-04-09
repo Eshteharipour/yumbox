@@ -120,11 +120,12 @@ def get_committed_configs(configs_dir="configs", ext=".yaml"):
 def run_all_configs(
     configs_dir="configs",
     ext=".yaml",
-    mode: Literal["committed", "all"] = "committed",
+    mode: Literal["committed", "all", "list"] = "committed",
     executable="python",
     script="main.py",
     extra_args=None,
     config_mode: Literal["name", "path"] = "path",
+    configs_list: list[str] | None = None,
 ):
     logger = BFG["logger"]
 
@@ -132,6 +133,8 @@ def run_all_configs(
         config_files = get_committed_configs(configs_dir, ext)
     elif mode == "all":
         config_files = get_configs(configs_dir, ext)
+    elif mode == "list":
+        config_files = configs_list
 
     if not config_files:
         logger.info(f"No {ext} files found. Exiting.")
