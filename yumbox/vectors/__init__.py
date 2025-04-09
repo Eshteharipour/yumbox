@@ -139,7 +139,7 @@ def sum_feats(
     colname_a: str,
     colname_b: str,
     normalize: Literal["before", "after", None] = None,
-) -> dict[str, np.ndarray]:
+) -> np.ndarray:
     # colname_a is id col for feats_a
     # colname_b is id col for feats_b
     # allows missing value on either col a or col b
@@ -188,12 +188,12 @@ def cat_feats(
     feats_b: dict[str, np.ndarray],
     colname_a: str,
     colname_b: str,
-    zeros_a: int | None = None,
-    zeros_b: int | None = None,
+    zeros_a: np.ndarray | None = None,
+    zeros_b: np.ndarray | None = None,
     normalize: Literal["before", "after", None] = None,
     pca_a: Callable | None = no_op,
     pca_b: Callable | None = no_op,
-) -> dict[str, np.ndarray]:
+) -> np.ndarray:
     # colname_a is id col for feats_a
     # colname_b is id col for feats_b
     # expects feats_a and feats_b to not have missing values if zeros_a and zero_b not provided
