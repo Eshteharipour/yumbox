@@ -119,13 +119,13 @@ def get_committed_configs(configs_dir="configs", ext=".yaml"):
 
 def run_all_configs(
     configs_dir="configs",
+    configs_list: list[str] | None = None,
     ext=".yaml",
     mode: Literal["committed", "all", "list"] = "committed",
     executable="python",
     script="main.py",
     extra_args=None,
     config_mode: Literal["name", "path"] = "path",
-    configs_list: list[str] | None = None,
 ):
     logger = BFG["logger"]
 
