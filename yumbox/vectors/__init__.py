@@ -201,7 +201,7 @@ def cat_feats(
         pca_a = no_op
     if pca_b is None:
         pca_b = no_op
-    if zeros_a == None and zeros_b == None:
+    if zeros_a is None and zeros_b is None:
         if normalize == None or normalize_vector == "after":
             x = np.concatenate(
                 np.array([pca_a(feats_a[r[colname_a]]), pca_b(feats_b[r[colname_b]])])
