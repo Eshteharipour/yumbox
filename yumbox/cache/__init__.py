@@ -1,6 +1,6 @@
 import functools
 import os
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from time import sleep
 
 import numpy as np
@@ -28,7 +28,9 @@ def cache(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            return safe_rpickle(cache_file)
+            result = safe_rpickle(cache_file)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+            return result
             # with open(cache_file, "rb") as fd:
             #     return pickle.load(fd)
         else:
@@ -62,7 +64,9 @@ def cache_kwargs(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            return safe_rpickle(cache_file)
+            result = safe_rpickle(cache_file)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+            return result
             # with open(cache_file, "rb") as fd:
             #     return pickle.load(fd)
         else:
@@ -92,7 +96,9 @@ def async_cache(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            return safe_rpickle(cache_file)
+            result = safe_rpickle(cache_file)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+            return result
             # with open(cache_file, "rb") as fd:
             #     return pickle.load(fd)
         else:
@@ -124,7 +130,9 @@ def index(func):
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
-            return safe_load(cache_file, faiss.read_index)
+            result = safe_load(cache_file, faiss.read_index)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+            return result
             # return faiss.read_index(cache_file)
         else:
             result = func(*args, **kwargs)
@@ -153,6 +161,7 @@ def np_cache(func):
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
             res = safe_load(cache_file, np.load)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
             # res = np.load(cache_file)
         else:
             res = None
@@ -184,6 +193,7 @@ def np_cache_dict(func):
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
             cache = safe_load(cache_file, np.load)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
             # cache = np.load(cache_file)
         else:
             cache = None
@@ -219,6 +229,7 @@ def unsafe_np_cache(func):
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
             res = safe_load(cache_file, np.load, allow_pickle=True)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
             # res = np.load(cache_file, allow_pickle=True)
         else:
             res = None
@@ -250,6 +261,7 @@ def safe_cache(func):
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
             res = safe_load(cache_file, load_file)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
             # res = load_file(cache_file)
         else:
             res = None
@@ -279,6 +291,7 @@ def kv_cache(func):
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
             res = safe_rpickle(cache_file)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
             # with open(cache_file, "rb") as fd:
             #     res = pickle.load(fd)
         else:
@@ -397,6 +410,7 @@ def last_offset(func):
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {cache_func_name} from {cache_dir}")
             output = safe_rpickle(cache_file)
+            logger.info(f"Loaded cache for {cache_func_name} from {cache_dir}")
             # with open(cache_file, "rb") as fd:
             #     output = pickle.load(fd)
         else:
@@ -418,8 +432,12 @@ def last_offset(func):
             offset = safe_ropen_fd(offset_cache_file, "readline", "r").strip()
             try:
                 offset = int(offset)
+                logger.info(f"Loaded offset for {offset_func_name} from {cache_dir}")
             except ValueError:
                 offset = 0
+                logger.info(
+                    f"Failed to load offset for {offset_func_name} from {cache_dir} with non integer value {offset}"
+                )
             # with open(offset_cache_file, "r") as fd:
             #     offset = fd.readline().strip()
             #     try:
@@ -485,6 +503,7 @@ def last_str_offset(func):
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {cache_func_name} from {cache_dir}")
             output = safe_rpickle(cache_file)
+            logger.info(f"Loaded cache for {cache_func_name} from {cache_dir}")
             # with open(cache_file, "rb") as fd:
             #     output = pickle.load(fd)
         else:
