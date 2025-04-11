@@ -132,11 +132,6 @@ def run_all_configs(
 ):
     logger = BFG["logger"]
 
-    # Fix Pytorch DataLoader hanging indefinitely
-    import torch.multiprocessing as mp
-
-    mp.set_start_method("spawn", force=True)
-
     if mode == "committed":
         config_files = get_committed_configs(configs_dir, ext)
     elif mode == "all":
