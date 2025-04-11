@@ -156,6 +156,8 @@ def run_all_configs(
     for config_file in config_files:
         logger.info(f"Starting: {config_file}")
 
+        os.environ["TQDM_DISABLE"] = "1"
+
         cmd = [executable, script, config_arg, config_file]
         if extra_args:
             cmd.extend(extra_args)
