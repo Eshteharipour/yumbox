@@ -60,19 +60,19 @@ def id2label(
     nn_d: np.ndarray,
     nn: np.ndarray,
     label_col: str,
-    confidence: float,
+    confidence: int | float,
 ):
     if hasattr(nn[0], "__iter__"):
-        k = len(nn[0])
+        k = 2
     else:
         k = 1
 
-    index2label = dict(zip(df.index, df[label_col]))
+    index2label = dict(zip(np.arange(len(df)).tolist(), df[label_col]))
     if k == 1:
         predictions = np.array([index2label[index] for index in nn])
     else:
         predictions = np.array([[index2label[index] for index in topk] for topk in nn])
-    if confidence:
+    if isinstance(confidence, (int, float)):
         certain = nn_d >= confidence
         predictions = np.where(certain, predictions, "-1")
     return predictions
