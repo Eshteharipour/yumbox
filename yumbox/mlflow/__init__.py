@@ -162,6 +162,8 @@ def run_all_configs(
         if extra_args:
             cmd.extend(extra_args)
 
+        logger.info(f"Running command: {cmd}")
+
         try:
             process = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
