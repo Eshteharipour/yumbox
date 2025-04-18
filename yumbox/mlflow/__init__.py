@@ -170,15 +170,31 @@ def run_all_configs(
             )
 
             while process.poll() is None:
-                output = process.stdout.readline()
-                if output:
-                    logger.info(output.strip())
+                import select
 
-            return_code = process.wait()
-            if return_code != 0:
-                error_output = process.stderr.read()
+                reads = [process.stdout, process.stderr]
+                readable, _, _ = select.select(reads, [], [], 0.1)  # 0.1s timeout
+
+                for readable_pipe in readable:
+                    if readable_pipe == process.stdout:
+                        output = readable_pipe.readline()
+                        if output:
+                            logger.info(output.strip())
+                    elif readable_pipe == process.stderr:
+                        error = readable_pipe.readline()
+                        if error:
+                            logger.info(f"Error: {error.strip()}")
+
+            # Get any remaining output
+            stdout, stderr = process.communicate()
+            if stdout:
+                for line in stdout.splitlines():
+                    logger.info(line.strip())
+            if stderr:
+                logger.info(f"Error: {stderr}")
+
+            if process.returncode != 0:
                 logger.info(f"✗ Failed: {config_file}")
-                logger.info(f"Error: {error_output}")
             else:
                 logger.info(f"✓ Completed: {config_file}")
 
