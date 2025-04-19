@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from collections.abc import Callable, Iterable
 from functools import partial
-from typing import Callable, Literal
+from typing import Callable, Literal, Type
 
 import numpy as np
 import pandas as pd
@@ -11,15 +11,17 @@ from tqdm import tqdm
 no_op = lambda x: x
 
 
-def process_batch(batch_data: tuple, search_func: Callable, k: int):
+def process_batch(batch_data: tuple, index: Type, search_method: str, k: int):
     """Process a single batch and return distances and indices."""
     batch, idx = batch_data  # Unpack batch and index
+    search_func = getattr(index, search_method)
     distances, indices = search_func(batch, k=k)
     return distances, indices
 
 
 def topk(
-    search_func: Callable,
+    index: Type,
+    search_method: str,
     queries: np.ndarray | list,
     k: int,
     keepdims=False,
@@ -58,7 +60,9 @@ def topk(
         ]
 
         with mp.Pool(processes=num_processes) as pool:
-            process_func = partial(process_batch, search_func=search_func, k=k)
+            process_func = partial(
+                process_batch, index=index, search_method=search_method, k=k
+            )
 
             results = list(
                 tqdm(
@@ -69,6 +73,7 @@ def topk(
             )
     # Single process
     else:
+        search_func = getattr(index, search_method)
         results = [search_func(queries, k=k)]
 
     for distances, indices in results:
