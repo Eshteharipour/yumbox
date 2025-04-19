@@ -1,5 +1,7 @@
+import multiprocessing as mp
 from collections.abc import Callable, Iterable
-from typing import Literal
+from functools import partial
+from typing import Callable, Literal
 
 import numpy as np
 import pandas as pd
@@ -9,15 +11,26 @@ from tqdm import tqdm
 no_op = lambda x: x
 
 
+def process_batch(batch_data: tuple, search_func: Callable, k: int):
+    """Process a single batch and return distances and indices."""
+    batch, idx = batch_data  # Unpack batch and index
+    distances, indices = search_func(batch, k=k)
+    return distances, indices
+
+
 def topk(
     search_func: Callable,
     queries: np.ndarray | list,
     k: int,
     keepdims=False,
     search_size: int | None = None,
+    num_processes: int | None = None,
 ):
     # keepdims: for faiss kmeans clusters topk, pass keepdims=True
     # renamed is_faiss_kmeans_index arg to keepdims
+
+    if num_processes is None:
+        num_processes = max(1, mp.cpu_count() - 1)
 
     # sparse array length issue
     try:
@@ -38,10 +51,27 @@ def topk(
     if search_size:
         batch_size = search_size // k
 
-    for i in tqdm(range(0, queries_len, batch_size)):
-        batch = queries[i : i + batch_size]
-        distances, indices = search_func(batch, k=k)
+    # Multiprocess large requests
+    if queries_len > batch_size:
+        batches = [
+            (queries[i : i + batch_size], i) for i in range(0, queries_len, batch_size)
+        ]
 
+        with mp.Pool(processes=num_processes) as pool:
+            process_func = partial(process_batch, search_func=search_func, k=k)
+
+            results = list(
+                tqdm(
+                    pool.imap(process_func, batches),
+                    total=len(batches),
+                    desc="Processing batches",
+                )
+            )
+    # Single process
+    else:
+        results = [search_func(queries, k=k)]
+
+    for distances, indices in results:
         nn_d.append(distances)
         nn.append(indices)
 
