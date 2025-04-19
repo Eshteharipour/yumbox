@@ -129,8 +129,12 @@ def run_all_configs(
     config_arg="-c",
     extra_args=None,
     config_mode: Literal["name", "path"] = "path",
+    disable_tqm=False,
 ):
     logger = BFG["logger"]
+
+    if disable_tqm:
+        os.environ["TQDM_DISABLE"] = "1"
 
     if mode == "committed":
         config_files = get_committed_configs(configs_dir, ext)
@@ -155,8 +159,6 @@ def run_all_configs(
 
     for config_file in config_files:
         logger.info(f"Starting: {config_file}")
-
-        os.environ["TQDM_DISABLE"] = "1"
 
         cmd = [executable, script, config_arg, config_file]
         if extra_args:
