@@ -193,16 +193,16 @@ def run_all_configs(
                 for line in stdout.splitlines():
                     logger.info(line.strip())
             if stderr:
-                logger.info(f"Error: {stderr}")
+                logger.error(f"Error: {stderr}")
 
             if process.returncode != 0:
-                logger.info(f"✗ Failed: {config_file}")
+                logger.error(f"✗ Failed: {config_file}")
             else:
                 logger.info(f"✓ Completed: {config_file}")
 
         except Exception as e:
-            logger.info(f"✗ Failed: {config_file}")
-            logger.info(f"Error: {str(e)}")
+            logger.error(f"✗ Failed: {config_file}")
+            logger.error(f"Error: {str(e)}")
 
         logger.info("-" * 50)
 
