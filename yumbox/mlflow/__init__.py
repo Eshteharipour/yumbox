@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from logging import Logger
 from pathlib import Path
 from typing import Literal, Optional
@@ -13,6 +14,10 @@ from omegaconf import DictConfig, OmegaConf
 from yumbox.cache import BFG
 
 DATE_TIME_FORMAT = "%Y-%m-%dT%H-%M-%S%z"
+
+
+def now_formatted():
+    return datetime.now().strftime(DATE_TIME_FORMAT)
 
 
 def log_params(cfg: DictConfig, prefix: str | None = None):
