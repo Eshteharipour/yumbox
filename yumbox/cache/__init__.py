@@ -1,5 +1,6 @@
 import functools
 import os
+import time
 from collections.abc import Callable
 from time import sleep
 
@@ -44,6 +45,47 @@ def cache(func):
             return result
 
     return wrapper
+
+
+def timed_cache(max_age_hours=1):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            cache_dir = BFG["cache_dir"]
+            logger = BFG["logger"]
+
+            func_name = func.__name__
+            cache_file = ""
+            if cache_dir:
+                cache_file = os.path.join(cache_dir, func_name)
+                cache_file += ".pkl"
+
+            # Check if cache file exists and is recent enough
+            if cache_dir and os.path.isfile(cache_file):
+                # Get file's last modified time
+                file_mtime = os.path.getmtime(cache_file)
+                current_time = time.time()
+                # Convert max_age_hours to seconds
+                max_age_seconds = max_age_hours * 3600
+
+                # Check if file was modified within max_age_hours
+                if (current_time - file_mtime) <= max_age_seconds:
+                    logger.info(f"Loading cache for {func_name} from {cache_dir}")
+                    result = safe_rpickle(cache_file)
+                    logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+                    return result
+
+            # Either no cache file or cache is too old
+            result = func(*args, **kwargs)
+            if cache_dir:
+                logger.info(f"Saving cache for {func_name} to {cache_dir}")
+                safe_wpickle(cache_file, result)
+                logger.info(f"Saved cache!")
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 def cache_kwargs(func):
