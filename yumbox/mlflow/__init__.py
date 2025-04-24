@@ -37,9 +37,11 @@ def log_params(cfg: DictConfig, prefix: str | None = None):
             mlflow.log_param(param_key, v)
 
 
-def log_scores_dict(name, scores_dict):
+def log_scores_dict(
+    scores_dict: dict, name: str | None = None, step: int | None = None
+):
     for k, v in scores_dict.items():
-        mlflow.log_metric(name + "_" + k, v)
+        mlflow.log_metric(name + "_" + k, v, step=step)
 
 
 def log_config(cfg: DictConfig, logger: None | Logger):
