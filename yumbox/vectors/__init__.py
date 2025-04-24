@@ -90,29 +90,6 @@ def topk(
     return nn_d, nn
 
 
-def id2label(
-    df: pd.DataFrame,
-    nn_d: np.ndarray,
-    nn: np.ndarray,
-    label_col: str,
-    confidence: int | float,
-):
-    if hasattr(nn[0], "__iter__"):
-        k = 2
-    else:
-        k = 1
-
-    index2label = dict(zip(np.arange(len(df)).tolist(), df[label_col]))
-    if k == 1:
-        predictions = np.array([index2label[index] for index in nn])
-    else:
-        predictions = np.array([[index2label[index] for index in topk] for topk in nn])
-    if isinstance(confidence, (int, float)):
-        certain = nn_d >= confidence
-        predictions = np.where(certain, predictions, "-1")
-    return predictions
-
-
 def nested_topk(
     create_index_func: callable,
     search_func_name: str,
