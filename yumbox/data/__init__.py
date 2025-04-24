@@ -1,11 +1,48 @@
 from collections.abc import Callable
+from io import BytesIO
 
 import numpy as np
 import pandas as pd
+import requests
 from PIL import Image
 from torch.utils.data import Dataset
 
 no_op = lambda x: x
+
+
+class WebImgDataset(Dataset):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        path_col: str,
+        embed_dim: int,
+        transform: Callable | None = no_op,
+    ):
+        if transform is None:
+            self.transform = no_op
+        else:
+            self.transform = transform
+
+        df_wimages = df[df[path_col].astype(bool) & df[path_col].notna()]
+        self.urls = df_wimages[path_col].tolist()
+        self.headers = {"User-Agent": "Mozilla/5.0"}
+
+        self.embed_dim = embed_dim
+
+    def __len__(self):
+        return len(self.urls)
+
+    def __getitem__(self, index):
+        url = self.urls[index]
+        try:
+            response = requests.get(url, stream=False, timeout=10, headers=self.headers)
+            response.raise_for_status()
+
+            img = Image.open(BytesIO(response.content)).convert("RGB")
+            img = self.transform(img)
+            return url, img
+        except Exception as e:
+            return url, np.zeros(self.embed_dim)
 
 
 class ImgDataset(Dataset):
@@ -22,7 +59,7 @@ class ImgDataset(Dataset):
         else:
             self.transform = transform
 
-        df_wimages = df[df[path_col].astype(bool)]
+        df_wimages = df[df[path_col].astype(bool) & df[path_col].notna()]
         hash2path = {}
         for i, r in df_wimages.iterrows():
             hash2path[r[hash_col]] = r[path_col]
