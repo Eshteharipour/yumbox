@@ -249,11 +249,11 @@ def cat_feats(
                         else (
                             [
                                 pca_a(feats_a[r[colname_a]]),
-                                zeros_b,
+                                pca_b(zeros_b),
                             ]
                             if (notfona(r[colname_a]))
                             else [
-                                zeros_a,
+                                pca_a(zeros_a),
                                 pca_b(feats_b[r[colname_b]]),
                             ]
                         )
@@ -280,13 +280,13 @@ def cat_feats(
                             np.concatenate(
                                 [
                                     pca_a(normalize_vector(feats_a[r[colname_a]])),
-                                    zeros_b,
+                                    pca_b(zeros_b),
                                 ]
                             )
                             if (notfona(r[colname_a]))
                             else np.concatenate(
                                 [
-                                    zeros_a,
+                                    pca_a(zeros_a),
                                     pca_b(normalize_vector(feats_b[r[colname_b]])),
                                 ]
                             )
