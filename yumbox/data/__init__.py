@@ -15,34 +15,35 @@ class WebImgDataset(Dataset):
         self,
         df: pd.DataFrame,
         path_col: str,
+        hash_col: str,
+        features: dict[str, np.ndarray],
         embed_dim: int,
         transform: Callable | None = no_op,
     ):
-        if transform is None:
-            self.transform = no_op
-        else:
-            self.transform = transform
+        self.transform = no_op if transform is None else transform
 
-        df_wimages = df[df[path_col].astype(bool) & df[path_col].notna()]
-        self.urls = df_wimages[path_col].tolist()
+        df_wimages = df[df[hash_col].astype(bool) & df[hash_col].notna()]
+        hash2path = {r[hash_col]: r[path_col] for _, r in df_wimages.iterrows()}
+        missing_keys = set(hash2path.keys()).difference(set(features.keys()))
+        self.data = [(k, hash2path[k]) for k in missing_keys]
+
         self.headers = {"User-Agent": "Mozilla/5.0"}
-
         self.embed_dim = embed_dim
 
     def __len__(self):
-        return len(self.urls)
+        return len(self.data)
 
     def __getitem__(self, index):
-        url = self.urls[index]
+        key, url = self.data[index]
         try:
             response = requests.get(url, stream=False, timeout=10, headers=self.headers)
             response.raise_for_status()
 
             img = Image.open(BytesIO(response.content)).convert("RGB")
             img = self.transform(img)
-            return url, img
+            return key, img
         except Exception as e:
-            return url, np.zeros(self.embed_dim)
+            return key, np.zeros(self.embed_dim)
 
 
 class ImgDataset(Dataset):
@@ -54,30 +55,21 @@ class ImgDataset(Dataset):
         features: dict[str, np.ndarray],
         transform: Callable | None = no_op,
     ):
-        if transform is None:
-            self.transform = no_op
-        else:
-            self.transform = transform
+        self.transform = no_op if transform is None else transform
 
-        df_wimages = df[df[path_col].astype(bool) & df[path_col].notna()]
-        hash2path = {}
-        for i, r in df_wimages.iterrows():
-            hash2path[r[hash_col]] = r[path_col]
-
+        df_wimages = df[df[hash_col].astype(bool) & df[hash_col].notna()]
+        hash2path = {r[hash_col]: r[path_col] for _, r in df_wimages.iterrows()}
         missing_keys = set(hash2path.keys()).difference(set(features.keys()))
-        hash2path = {k: v for k, v in hash2path.items() if k in missing_keys}
-        self.bn2path = hash2path
-        self.data = list(hash2path.keys())
+        self.data = [(k, hash2path[k]) for k in missing_keys]
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
-        hash = self.data[index]
-        path = self.bn2path[hash]
+        key, path = self.data[index]
         img = Image.open(path).convert("RGB")
         img = self.transform(img)
-        return hash, img
+        return key, img
 
 
 class TextDataset(Dataset):
@@ -90,19 +82,10 @@ class TextDataset(Dataset):
         preprocessor: Callable | None = no_op,
         tokenizer: Callable | None = no_op,
     ):
-        if preprocessor is None:
-            self.preprocessor = no_op
-        else:
-            self.preprocessor = preprocessor
-
-        if tokenizer is None:
-            self.tokenizer = no_op
-        else:
-            self.tokenizer = tokenizer
+        self.preprocessor = no_op if preprocessor is None else preprocessor
+        self.tokenizer = no_op if tokenizer is None else tokenizer
 
         id2text = dict(zip(df[id_col], df[text_col]))
-        id2text = {k: v for k, v in id2text.items() if k and pd.notna(k)}
-
         missing_keys = set(id2text.keys()).difference(set(features.keys()))
         self.data = [(k, id2text[k]) for k in missing_keys]
 
@@ -110,12 +93,12 @@ class TextDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        idx, text = self.data[index]
+        key, text = self.data[index]
         tok = self.preprocessor(text)
         tok = self.tokenizer(tok)
         if not isinstance(tok, str):
             tok = tok.squeeze()
-        return idx, tok
+        return key, tok
 
 
 def split_token_ids(ids, chunk_size, overlap):
