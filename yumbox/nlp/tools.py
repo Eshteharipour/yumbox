@@ -369,7 +369,7 @@ class defaultname:
         return list_backref_dict
 
     def get_cluster(self, index: str):
-        dn = self.__getitem__[index]
+        dn = self.__getitem__(index)
         # Create new set to not corrupt _backref_dict dataset
         cluster = set(self._backref_dict[dn])
         cluster.add(dn)
