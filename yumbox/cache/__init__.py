@@ -98,7 +98,7 @@ def cache_kwargs(func):
         func_kwargs = []
         for k, v in kwargs.items():
             func_kwargs.append(f"{k}-{v}")
-        func_kwargs = " ".join(func_kwargs)
+        func_kwargs = ",".join(func_kwargs)
         cache_file = ""
         if cache_dir:
             cache_file = os.path.join(cache_dir, func_name + "_" + func_kwargs)
@@ -214,6 +214,41 @@ def np_cache(func):
                 cache_file, np.savez, keys=list(res.keys()), values=list(res.values())
             )
             # np.savez(cache_file, keys=list(res.keys()), values=list(res.values()))
+            logger.info(f"Saved cache!")
+        return res
+
+    return wrapper
+
+
+def np_cache_kwargs(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        func_kwargs = []
+        for k, v in kwargs.items():
+            func_kwargs.append(f"{k}-{v}")
+        func_kwargs = ",".join(func_kwargs)
+        cache_file = ""
+        if cache_dir:
+            cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs}")
+            cache_file += ".npz"
+
+        if cache_dir and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_dir}")
+            res = safe_load(cache_file, np.load)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+        else:
+            res = None
+
+        res = func(*args, **kwargs, cache=res, cache_file=cache_file)
+        if cache_dir:
+            logger.info(f"Saving cache for {func_name} to {cache_dir}")
+            safe_save_kw(
+                cache_file, np.savez, keys=list(res.keys()), values=list(res.values())
+            )
             logger.info(f"Saved cache!")
         return res
 
@@ -439,7 +474,7 @@ def last_offset(func):
         for k, v in kwargs.items():
             if k.endswith("_cached"):
                 func_kwargs.append(f"{k}-{v}")
-        func_kwargs = " ".join(func_kwargs)
+        func_kwargs = ",".join(func_kwargs)
 
         if func_kwargs:
             cache_func_name = func.__name__ + "_" + func_kwargs
@@ -535,7 +570,7 @@ def last_str_offset(func):
         for k, v in kwargs.items():
             if k.endswith("_cached"):
                 func_kwargs.append(f"{k}-{v}")
-        func_kwargs = " ".join(func_kwargs)
+        func_kwargs = ",".join(func_kwargs)
 
         cache_func_name = func.__name__
         cache_file = ""
