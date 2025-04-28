@@ -322,6 +322,43 @@ def np_cache_kwargs_hash(func):
     return wrapper
 
 
+def np_cache_kwargs_list_hash(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        cache_dict = {}
+        for c in kwargs["cache_kwargs"]:
+            cache_dict[c] = kwargs[c]
+        func_kwargs_hash = hashlib.md5(
+            json.dumps(cache_dict, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        cache_file = ""
+        if cache_dir:
+            cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}")
+            cache_file += ".npz"
+
+        if cache_dir and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_dir}")
+            res = safe_load(cache_file, np.load)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+        else:
+            res = None
+
+        res = func(*args, **kwargs, cache=res, cache_file=cache_file)
+        if cache_dir:
+            logger.info(f"Saving cache for {func_name} to {cache_dir}")
+            safe_save_kw(
+                cache_file, np.savez, keys=list(res.keys()), values=list(res.values())
+            )
+            logger.info(f"Saved cache!")
+        return res
+
+    return wrapper
+
+
 def np_cache_dict(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
