@@ -1,4 +1,6 @@
 import functools
+import hashlib
+import json
 import os
 import time
 from collections.abc import Callable
@@ -234,6 +236,71 @@ def np_cache_kwargs(func):
         cache_file = ""
         if cache_dir:
             cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs}")
+            cache_file += ".npz"
+
+        if cache_dir and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_dir}")
+            res = safe_load(cache_file, np.load)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+        else:
+            res = None
+
+        res = func(*args, **kwargs, cache=res, cache_file=cache_file)
+        if cache_dir:
+            logger.info(f"Saving cache for {func_name} to {cache_dir}")
+            safe_save_kw(
+                cache_file, np.savez, keys=list(res.keys()), values=list(res.values())
+            )
+            logger.info(f"Saved cache!")
+        return res
+
+    return wrapper
+
+
+def cache_kwargs_hash(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        func_kwargs_hash = hashlib.md5(
+            json.dumps(kwargs, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        cache_file = ""
+        if cache_dir:
+            cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}")
+            cache_file += ".pkl"
+
+        if cache_dir and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_dir}")
+            result = safe_rpickle(cache_file)
+            logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+            return result
+        else:
+            result = func(*args, **kwargs)
+            if cache_dir:
+                logger.info(f"Saving cache for {func_name} to {cache_dir}")
+                safe_wpickle(cache_file, result)
+                logger.info(f"Saved cache!")
+            return result
+
+    return wrapper
+
+
+def np_cache_kwargs_hash(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        func_kwargs_hash = hashlib.md5(
+            json.dumps(kwargs, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        cache_file = ""
+        if cache_dir:
+            cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}")
             cache_file += ".npz"
 
         if cache_dir and os.path.isfile(cache_file):
