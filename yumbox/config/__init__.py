@@ -124,13 +124,19 @@ def setup_logger(
 ):
     # stream arg is deprecated and kept for backwards compatibility
 
+    if isinstance(level, str):
+        level = logging.getLevelName(level.upper())
+    if isinstance(file_level, str):
+        file_level = logging.getLevelName(file_level.upper())
+
     logger = logging.getLogger(name)
     if logger.hasHandlers():
         # Libraries like Kornia add handlers, clear them:
         logger.handlers.clear()
-    global _streams
     logger.propagate = False
-    logger.setLevel(level)
+
+    min_level = min(level, file_level)
+    logger.setLevel(min_level)
 
     sh = logging.StreamHandler(stream=sys.stdout)
     sh.setLevel(level)
