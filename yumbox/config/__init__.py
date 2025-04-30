@@ -156,3 +156,20 @@ def redir_print(func: Callable, *args, **kwargs) -> str:
     with redirect_stdout(buffer):
         func(*args, **kwargs)
     return buffer.getvalue()
+
+
+def main_run(main: Callable):
+    import traceback
+    from time import time
+
+    logger = BFG["logger"]
+    begin = time()
+    try:
+        main()
+    except Exception as e:
+        logger.error(traceback.format_exc())
+    finally:
+        elapsed = time() - begin
+        hours, rem = divmod(elapsed, 3600)
+        minutes, seconds = divmod(rem, 60)
+        logger.info(f"Execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
