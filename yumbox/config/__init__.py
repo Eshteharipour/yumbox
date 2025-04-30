@@ -119,7 +119,9 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-def setup_logger(name, level=logging.INFO, path="", stream="stdout"):
+def setup_logger(
+    name, level=logging.INFO, path="", stream="stdout", file_level=logging.DEBUG
+):
     # stream arg is deprecated and kept for backwards compatibility
 
     logger = logging.getLogger(name)
@@ -142,7 +144,7 @@ def setup_logger(name, level=logging.INFO, path="", stream="stdout"):
         fh = logging.FileHandler(filename=logfile)
         formatter = logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s")
         fh.setFormatter(formatter)
-        fh.setLevel(level)
+        fh.setLevel(file_level)
         logger.addHandler(fh)
 
     return logger
