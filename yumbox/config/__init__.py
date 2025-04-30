@@ -126,7 +126,8 @@ def setup_logger(
 
     logger = logging.getLogger(name)
     if logger.hasHandlers():
-        return logger
+        # Libraries like Kornia add handlers, clear them:
+        logger.handlers.clear()
     global _streams
     logger.propagate = False
     logger.setLevel(level)
