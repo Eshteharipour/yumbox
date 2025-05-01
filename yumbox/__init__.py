@@ -42,10 +42,3 @@ def worker_seed(worker_id):
 
     rank = torch.initial_seed() % 2**32
     random_seed(rank)
-
-
-def get_dataset_batch_seed(
-    dataset_length: int, rows_trained: int, base_seed: int = 362
-) -> int:
-    iterations_completed = rows_trained // dataset_length
-    return base_seed + iterations_completed
