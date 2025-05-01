@@ -210,6 +210,82 @@ def np_cache(func):
     return wrapper
 
 
+def np_cache_lazy(func):
+    @functools.wraps(func)
+    def wrapper(*args, keys: list[str] | None = None, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        cache_file = os.path.join(cache_dir, f"{func_name}.npz") if cache_dir else ""
+
+        # Initialize features if not provided
+        features = kwargs.get("features", {})
+
+        # Load cache (partially or fully based on keys)
+        if cache_dir and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_file}")
+            try:
+                # Use mmap for lazy loading
+                with np.load(cache_file, mmap_mode="r") as cache_data:
+                    cached_keys = cache_data["keys"]
+                    cached_values = cache_data["values"]
+                    # If keys are specified, load only those; otherwise, load all
+                    if keys is not None:
+                        # Find indices of requested keys
+                        key_indices = [
+                            i for i, k in enumerate(cached_keys) if k in keys
+                        ]
+                        if key_indices:
+                            selected_keys = [cached_keys[i] for i in key_indices]
+                            selected_values = [cached_values[i] for i in key_indices]
+                            features.update(dict(zip(selected_keys, selected_values)))
+                    else:
+                        # Load all keys if none specified
+                        features.update(dict(zip(cached_keys, cached_values)))
+                logger.info(f"Loaded cache for {func_name} from {cache_file}")
+            except Exception as e:
+                logger.error(f"Failed to load cache: {e}")
+                cache_data = None
+        else:
+            cache_data = None
+
+        # Call the original function with updated features
+        kwargs["features"] = features
+        res = func(*args, **kwargs)
+
+        # Save cache (including all keys, even those not used in this run)
+        if cache_dir:
+            logger.info(f"Saving cache for {func_name} to {cache_file}")
+            try:
+                # Merge existing cache with new results
+                all_keys = list(res.keys())
+                all_values = list(res.values())
+                if cache_data is not None:
+                    # Include previous keys not overwritten in this run
+                    with np.load(cache_file, mmap_mode="r") as prev_cache:
+                        prev_keys = prev_cache["keys"]
+                        prev_values = prev_cache["values"]
+                        for pk, pv in zip(prev_keys, prev_values):
+                            if pk not in all_keys:
+                                all_keys.append(pk)
+                                all_values.append(pv)
+                # Save using np.savez
+                safe_save_kw(
+                    cache_file,
+                    np.savez,
+                    keys=all_keys,
+                    values=all_values,
+                )
+                logger.info(f"Saved cache for {func_name} to {cache_file}")
+            except Exception as e:
+                logger.error(f"Failed to save cache: {e}")
+
+        return res
+
+    return wrapper
+
+
 def np_cache_kwargs(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
