@@ -24,10 +24,7 @@ def cache(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".pkl"
+        cache_file = os.path.join(cache_dir, f"{func_name}.pkl") if cache_dir else ""
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -57,10 +54,9 @@ def timed_cache(max_age_hours=1):
             logger = BFG["logger"]
 
             func_name = func.__name__
-            cache_file = ""
-            if cache_dir:
-                cache_file = os.path.join(cache_dir, func_name)
-                cache_file += ".pkl"
+            cache_file = (
+                os.path.join(cache_dir, f"{func_name}.pkl") if cache_dir else ""
+            )
 
             # Check if cache file exists and is recent enough
             if cache_dir and os.path.isfile(cache_file):
@@ -101,10 +97,11 @@ def cache_kwargs(func):
         for k, v in kwargs.items():
             func_kwargs.append(f"{k}-{v}")
         func_kwargs = ",".join(func_kwargs)
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name + "_" + func_kwargs)
-            cache_file += ".pkl"
+        cache_file = (
+            os.path.join(cache_dir, f"{func_name}_{func_kwargs}.pkl")
+            if cache_dir
+            else ""
+        )
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -133,10 +130,7 @@ def async_cache(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".pkl"
+        cache_file = os.path.join(cache_dir, f"{func_name}.pkl") if cache_dir else ""
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -167,10 +161,7 @@ def index(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".bin"
+        cache_file = os.path.join(cache_dir, f"{func_name}.bin") if cache_dir else ""
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -197,10 +188,7 @@ def np_cache(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".npz"
+        cache_file = os.path.join(cache_dir, f"{func_name}.npz") if cache_dir else ""
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -233,10 +221,11 @@ def np_cache_kwargs(func):
         for k, v in kwargs.items():
             func_kwargs.append(f"{k}-{v}")
         func_kwargs = ",".join(func_kwargs)
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs}")
-            cache_file += ".npz"
+        cache_file = (
+            os.path.join(cache_dir, f"{func_name}_{func_kwargs}.npz")
+            if cache_dir
+            else ""
+        )
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -267,10 +256,11 @@ def cache_kwargs_hash(func):
         func_kwargs_hash = hashlib.md5(
             json.dumps(kwargs, sort_keys=True, default=str).encode()
         ).hexdigest()
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}")
-            cache_file += ".pkl"
+        cache_file = (
+            os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}.pkl")
+            if cache_dir
+            else ""
+        )
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -298,10 +288,11 @@ def np_cache_kwargs_hash(func):
         func_kwargs_hash = hashlib.md5(
             json.dumps(kwargs, sort_keys=True, default=str).encode()
         ).hexdigest()
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}")
-            cache_file += ".npz"
+        cache_file = (
+            os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}.npz")
+            if cache_dir
+            else ""
+        )
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -335,10 +326,11 @@ def np_cache_kwargs_list_hash(func):
         func_kwargs_hash = hashlib.md5(
             json.dumps(cache_dict, sort_keys=True, default=str).encode()
         ).hexdigest()
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}")
-            cache_file += ".npz"
+        cache_file = (
+            os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}.npz")
+            if cache_dir
+            else ""
+        )
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -366,10 +358,7 @@ def np_cache_dict(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".npz"
+        cache_file = os.path.join(cache_dir, f"{func_name}.npz") if cache_dir else ""
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -402,10 +391,7 @@ def unsafe_np_cache(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".npz"
+        cache_file = os.path.join(cache_dir, f"{func_name}.npz") if cache_dir else ""
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -434,10 +420,9 @@ def safe_cache(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".safetensors"
+        cache_file = (
+            os.path.join(cache_dir, f"{func_name}.safetensors") if cache_dir else ""
+        )
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -464,10 +449,7 @@ def kv_cache(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, func_name)
-            cache_file += ".pkl"
+        cache_file = os.path.join(cache_dir, f"{func_name}.pkl") if cache_dir else ""
 
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_dir}")
@@ -584,10 +566,9 @@ def last_offset(func):
             cache_func_name = func.__name__ + "_" + func_kwargs
         else:
             cache_func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, cache_func_name)
-            cache_file += ".pkl"
+        cache_file = (
+            os.path.join(cache_dir, f"{cache_func_name}.pkl") if cache_dir else ""
+        )
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {cache_func_name} from {cache_dir}")
             output = safe_rpickle(cache_file)
@@ -603,10 +584,9 @@ def last_offset(func):
             )
         else:
             offset_func_name = func.__name__ + "_" + last_offset.__name__
-        offset_cache_file = ""
-        if cache_dir:
-            offset_cache_file = os.path.join(cache_dir, offset_func_name)
-            offset_cache_file += ".txt"
+        offset_cache_file = (
+            os.path.join(cache_dir, f"{offset_func_name}.txt") if cache_dir else ""
+        )
 
         if cache_dir and os.path.isfile(offset_cache_file):
             logger.info(f"Loading offset for {offset_func_name} from {cache_dir}")
@@ -677,10 +657,9 @@ def last_str_offset(func):
         func_kwargs = ",".join(func_kwargs)
 
         cache_func_name = func.__name__
-        cache_file = ""
-        if cache_dir:
-            cache_file = os.path.join(cache_dir, cache_func_name)
-            cache_file += ".pkl"
+        cache_file = (
+            os.path.join(cache_dir, f"{cache_func_name}.pkl") if cache_dir else ""
+        )
         if cache_dir and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {cache_func_name} from {cache_dir}")
             output = safe_rpickle(cache_file)
@@ -696,10 +675,9 @@ def last_str_offset(func):
             )
         else:
             offset_func_name = func.__name__ + "_" + last_offset.__name__
-        offset_cache_file = ""
-        if cache_dir:
-            offset_cache_file = os.path.join(cache_dir, offset_func_name)
-            offset_cache_file += ".txt"
+        offset_cache_file = (
+            os.path.join(cache_dir, f"{offset_func_name}.txt") if cache_dir else ""
+        )
 
         if cache_dir and os.path.isfile(offset_cache_file):
             logger.info(f"Loading offset for {offset_func_name} from {cache_dir}")
