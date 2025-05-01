@@ -20,6 +20,7 @@ dependencies = [
     "safetensors",
     "lmdb",
     "msgpack",
+    "h5py",
 ]
 
 [project.optional-dependencies]
