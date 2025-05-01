@@ -41,7 +41,9 @@ def log_scores_dict(
     scores_dict: dict, name: str | None = None, step: int | None = None
 ):
     for k, v in scores_dict.items():
-        mlflow.log_metric(name + "_" + k, v, step=step)
+        if name:
+            k = name + "_" + k
+        mlflow.log_metric(k, v, step=step)
 
 
 def log_config(cfg: DictConfig, logger: None | Logger):
