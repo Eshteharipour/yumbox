@@ -264,7 +264,10 @@ def set_tracking_uri(path: str):
         mlflow.set_tracking_uri(f"file:{path}")
     # Otherwise get parent dir of entrypoint script
     else:
-        main_file = Path(sys.argv[0]).parent.resolve()
+        # Resolves to interpreter path on console:
+        # main_file = Path(sys.argv[0]).parent.resolve()
+
+        main_file = Path(os.getcwd()).resolve()
         mlflow_path = os.path.join(main_file, path)
         os.makedirs(mlflow_path, exist_ok=True)
         mlflow.set_tracking_uri(f"file:{mlflow_path}")
