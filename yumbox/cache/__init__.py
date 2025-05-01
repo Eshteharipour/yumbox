@@ -12,6 +12,7 @@ from safetensors.numpy import load_file, save_file
 from yumbox.config import BFG
 
 from .fs import *
+from .hdf import hd5_cache
 from .kv import LMDB, LMDBMultiIndex
 
 # TODO: fix safe_save_kw keys= values=
