@@ -307,6 +307,61 @@ class defaultname:
             self._backref_dict[new_default].add(new_alt)
             return new_default
 
+    def add_return_len(self, new_default: str, new_alt: str):
+        """Returns the length of clusters joining each other."""
+
+        if not new_default:
+            raise ValueError("new_default is empty!")
+        if not isinstance(new_default, str):
+            raise ValueError("new_default is not str!")
+        if not new_alt:
+            raise ValueError("new_alt is empty!")
+        if not isinstance(new_alt, str):
+            raise ValueError("new_alt is not str!")
+
+        if new_default == new_alt:
+            return 0, 0
+
+        new_default_found = False
+        new_alt_found = False
+
+        default = self.search(new_default)
+        if default:
+            new_default_found = True
+            new_default = default
+
+        default = self.search(new_alt)
+        if default:
+            new_alt_found = True
+            new_alt = default
+
+        if new_default == new_alt:
+            return 0, 0
+
+        # Unite two sets
+        if new_default_found and new_alt_found:
+            alts = self._backref_dict.pop(new_alt)
+
+            default_len = len(self._backref_dict[new_default])
+            self._backref_dict[new_default].update(alts)
+
+            for a in alts:
+                self._dict[a] = new_default
+
+            self._dict[new_alt] = new_default
+            self._backref_dict[new_default].add(new_alt)
+            return default_len + 1, len(alts) + 1
+        elif new_alt_found:
+            self._dict[new_default] = new_alt
+            alt_len = len(self._backref_dict[new_alt])
+            self._backref_dict[new_alt].add(new_default)
+            return 1, alt_len + 1
+        else:
+            self._dict[new_alt] = new_default
+            default_len = len(self._backref_dict[new_default])
+            self._backref_dict[new_default].add(new_alt)
+            return default_len + 1, 1
+
     def _build_backref(self):
         """Build backreferences dict which is default to alternate names.
         This is only to be used in tests."""
