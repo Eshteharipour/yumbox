@@ -164,14 +164,36 @@ def redir_print(func: Callable, *args, **kwargs) -> str:
     return buffer.getvalue()
 
 
-def main_run(main: Callable):
+def execution_wrapper(func):
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        import traceback
+        from time import time
+
+        logger = BFG["logger"]
+
+        begin = time()
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            logger.error(traceback.format_exc())
+        finally:
+            elapsed = time() - begin
+            hours, rem = divmod(elapsed, 3600)
+            minutes, seconds = divmod(rem, 60)
+            logger.info(f"Execution time: {int(hours)}h {int(minutes)}m {seconds:.2f}s")
+
+    return wrapped
+
+
+def main_run(main: Callable, *args, **kwargs):
     import traceback
     from time import time
 
     logger = BFG["logger"]
     begin = time()
     try:
-        main()
+        main(*args, **kwargs)
     except Exception as e:
         logger.error(traceback.format_exc())
     finally:
