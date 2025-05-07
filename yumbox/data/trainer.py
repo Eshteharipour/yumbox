@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader, Sampler
+from torch.utils.data import Dataset, DataLoader, Sampler, SubsetRandomSampler
 import mlflow
 import warnings
 from typing import Optional, Callable, Dict, Any, List, Tuple, Union
@@ -588,7 +588,7 @@ def train_iteration(
     # If no sampler provided, get indices for this iteration
     if sampler is None:
         iter_indices = dataset.get_iteration_indices(iteration, iteration_size)
-        subset_sampler = torch.utils.data.SubsetRandomSampler(iter_indices)
+        subset_sampler = SubsetRandomSampler(iter_indices)
         dataloader = DataLoader(
             dataset, batch_size=batch_size, sampler=subset_sampler, **dataloader_kwargs
         )
