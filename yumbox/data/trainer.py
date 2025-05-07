@@ -1,20 +1,18 @@
 import numpy as np
 import pandas as pd
-import torch
 from torch.utils.data import Dataset, DataLoader, Sampler, SubsetRandomSampler
 import mlflow
 import warnings
-from typing import Optional, Callable, Dict, Any, List, Tuple, Union
+from typing import Any
+from collections.abc import Callable
 import random
-from PIL import Image
-import os
 
 
 class FlexibleDataset(Dataset):
     def __init__(
         self,
         dataframe: pd.DataFrame,
-        preprocessors: Dict[str, Callable] = None,
+        preprocessors: dict[str, Callable] = None,
         mode: str = "default",
         image_column: str = "path",
         text_column: str = "name",
@@ -24,7 +22,7 @@ class FlexibleDataset(Dataset):
 
         Args:
             dataframe: Input dataframe containing data paths/text/features
-            preprocessors: Dict of preprocessing functions for different column types
+            preprocessors: dict of preprocessing functions for different column types
             mode: Mode for preprocessing ('image', 'text', 'multimodal', 'default')
             image_column: Column name for image paths
             text_column: Column name for text data
@@ -42,7 +40,7 @@ class FlexibleDataset(Dataset):
     def __len__(self) -> int:
         return self.dataset_size
 
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         # Get actual index from shuffled indices if needed
         actual_idx = self._shuffled_indices[idx]
         row = self.df.iloc[actual_idx]
@@ -135,7 +133,7 @@ class ClusterSampler(Sampler):
     def __init__(
         self,
         dataset: FlexibleDataset,
-        cluster_ids: List[int],
+        cluster_ids: list[int],
         samples_per_cluster: int,
         batch_size: int,
     ):
@@ -144,7 +142,7 @@ class ClusterSampler(Sampler):
 
         Args:
             dataset: The dataset to sample from
-            cluster_ids: List of cluster IDs for each sample in the dataset
+            cluster_ids: list of cluster IDs for each sample in the dataset
             samples_per_cluster: Number of samples to take from each cluster
             batch_size: Size of each batch
         """
@@ -155,7 +153,7 @@ class ClusterSampler(Sampler):
         self.batch_size = batch_size
 
         # Group indices by cluster
-        self.clusters: Dict[int, List[int]] = {}
+        self.clusters: dict[int, list[int]] = {}
         for i, cluster_id in enumerate(cluster_ids):
             if cluster_id not in self.clusters:
                 self.clusters[cluster_id] = []
@@ -229,7 +227,7 @@ class TripletSampler(Sampler):
     def __init__(
         self,
         dataset: FlexibleDataset,
-        labels: List[int],
+        labels: list[int],
         batch_size: int,
         neg_to_pos_ratio: int = 1,
     ):
@@ -238,7 +236,7 @@ class TripletSampler(Sampler):
 
         Args:
             dataset: The dataset to sample from
-            labels: List of labels for each sample in the dataset
+            labels: list of labels for each sample in the dataset
             batch_size: Size of each batch (must be divisible by (neg_to_pos_ratio + 2))
             neg_to_pos_ratio: Number of negative samples per positive sample
         """
@@ -255,7 +253,7 @@ class TripletSampler(Sampler):
         ), f"Batch size must be divisible by {triplet_size}"
 
         # Group indices by label
-        self.label_to_indices: Dict[int, List[int]] = {}
+        self.label_to_indices: dict[int, list[int]] = {}
         for i, label in enumerate(labels):
             if label not in self.label_to_indices:
                 self.label_to_indices[label] = []
@@ -338,7 +336,7 @@ class SiameseSampler(Sampler):
     def __init__(
         self,
         dataset: FlexibleDataset,
-        labels: List[int],
+        labels: list[int],
         batch_size: int,
         pos_neg_ratio: float = 0.5,  # Ratio of positive pairs, e.g., 0.5 means half positive, half negative
     ):
@@ -347,7 +345,7 @@ class SiameseSampler(Sampler):
 
         Args:
             dataset: The dataset to sample from
-            labels: List of labels for each sample in the dataset
+            labels: list of labels for each sample in the dataset
             batch_size: Size of each batch (must be divisible by 2)
             pos_neg_ratio: Ratio of positive pairs to all pairs
         """
@@ -361,7 +359,7 @@ class SiameseSampler(Sampler):
         assert batch_size % 2 == 0, "Batch size must be divisible by 2 for pairs"
 
         # Group indices by label
-        self.label_to_indices: Dict[int, List[int]] = {}
+        self.label_to_indices: dict[int, list[int]] = {}
         for i, label in enumerate(labels):
             if label not in self.label_to_indices:
                 self.label_to_indices[label] = []
@@ -440,7 +438,7 @@ class ContrastiveSampler(Sampler):
     def __init__(
         self,
         dataset: FlexibleDataset,
-        labels: List[int],
+        labels: list[int],
         batch_size: int,
         num_classes_per_batch: int = 8,  # Number of different classes in each batch
         samples_per_class: int = 4,  # Number of samples per class in each batch
@@ -450,7 +448,7 @@ class ContrastiveSampler(Sampler):
 
         Args:
             dataset: The dataset to sample from
-            labels: List of labels for each sample in the dataset
+            labels: list of labels for each sample in the dataset
             batch_size: Size of each batch
             num_classes_per_batch: Number of different classes in each batch
             samples_per_class: Number of samples per class in each batch
@@ -468,7 +466,7 @@ class ContrastiveSampler(Sampler):
         ), "Batch size must be at least num_classes_per_batch * samples_per_class"
 
         # Group indices by label
-        self.label_to_indices: Dict[int, List[int]] = {}
+        self.label_to_indices: dict[int, list[int]] = {}
         for i, label in enumerate(labels):
             if label not in self.label_to_indices:
                 self.label_to_indices[label] = []
@@ -540,16 +538,15 @@ class ContrastiveSampler(Sampler):
         return len(self.dataset)
 
 
-def train_iteration(
-    model: Any,
+def get_dataloader(
     dataset: FlexibleDataset,
     epoch: int,
     iteration: int,
     iteration_size: int,
     batch_size: int,
-    sampler: Optional[Sampler] = None,
+    sampler: Sampler|None = None,
     **dataloader_kwargs,
-) -> Any:
+) -> DataLoader:
     """
     Train for one iteration within an epoch.
 
@@ -558,7 +555,7 @@ def train_iteration(
         dataset: FlexibleDataset instance
         epoch: Current epoch number
         iteration: Current iteration within the epoch
-        iteration_size: Number of samples in this iteration
+        iteration_size: Number of batches in this iteration
         batch_size: Batch size for training
         sampler: Optional sampler to use for this iteration
         dataloader_kwargs: Additional arguments for DataLoader
@@ -598,11 +595,4 @@ def train_iteration(
             dataset, batch_size=batch_size, sampler=sampler, **dataloader_kwargs
         )
 
-    # Train model for this iteration
-    # Your training logic here
-    for batch in dataloader:
-        # Example training step
-        pass
-
-    return model
-
+    return dataloader
