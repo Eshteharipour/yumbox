@@ -95,23 +95,27 @@ class FlexibleDataset(Dataset):
             self._shuffled_indices = self._original_indices.copy()
             rng.shuffle(self._shuffled_indices)
 
-    def get_iteration_indices(self, iteration: int, iteration_size: int) -> np.ndarray:
+    def get_batch_indices(
+        self, batch_start: int, num_batches: int, batch_size: int
+    ) -> np.ndarray:
         """
-        Get indices for a specific iteration within the current epoch.
+        Get indices for specific batches within the current epoch.
 
         Args:
-            iteration: The iteration number (0-indexed)
-            iteration_size: Number of samples in this iteration
+            batch_start: The starting batch number (0-indexed)
+            num_batches: Number of batches to include
+            batch_size: Size of each batch
 
         Returns:
-            Numpy array of indices for this iteration
+            Numpy array of indices for these batches
         """
-        start_idx = iteration * iteration_size
-        end_idx = min(start_idx + iteration_size, self.dataset_size)
+        # Calculate sample indices
+        start_idx = batch_start * batch_size
+        end_idx = min(start_idx + (num_batches * batch_size), self.dataset_size)
 
         if start_idx >= self.dataset_size:
             warnings.warn(
-                f"Iteration {iteration} exceeds dataset size. Returning empty array."
+                f"Batch {batch_start} exceeds dataset size. Returning empty array."
             )
             return np.array([], dtype=np.int64)
 
@@ -541,37 +545,36 @@ class ContrastiveSampler(Sampler):
 def get_dataloader(
     dataset: FlexibleDataset,
     epoch: int,
-    iteration: int,
-    iteration_size: int,
+    start_batch: int, 
+    num_batches: int, 
     batch_size: int,
-    sampler: Sampler|None = None,
+    sampler: Sampler | None = None,
     **dataloader_kwargs,
 ) -> DataLoader:
     """
-    Train for one iteration within an epoch.
+    Get dataloader for a specific set of batches within an epoch.
 
     Args:
-        model: The model to train
         dataset: FlexibleDataset instance
         epoch: Current epoch number
-        iteration: Current iteration within the epoch
-        iteration_size: Number of batches in this iteration
+        iteration: Starting batch number within the epoch (0-indexed)
+        iteration_size: Number of batches to include in this iteration
         batch_size: Batch size for training
         sampler: Optional sampler to use for this iteration
         dataloader_kwargs: Additional arguments for DataLoader
 
     Returns:
-        The trained model
+        DataLoader configured for the requested batches
     """
     # Set epoch to ensure consistent shuffling
     dataset.set_epoch(epoch)
 
     # Log training metadata to MLflow
     mlflow.log_param("epoch", epoch)
-    mlflow.log_param("iteration", iteration)
-    mlflow.log_param("iteration_size", iteration_size)
+    mlflow.log_param("start_batch", start_batch)
+    mlflow.log_param("num_batches", num_batches)
     mlflow.log_param("batch_size", batch_size)
-    mlflow.log_param("total_samples", iteration_size * batch_size)
+    mlflow.log_param("total_samples", num_batches * batch_size)
     mlflow.log_param("dataset_size", dataset.dataset_size)
 
     # Verify dataset size hasn't changed
@@ -582,10 +585,10 @@ def get_dataloader(
     )
     dataset.verify_dataset_size(expected_size)
 
-    # If no sampler provided, get indices for this iteration
+    # If no sampler provided, get indices for these batches
     if sampler is None:
-        iter_indices = dataset.get_iteration_indices(iteration, iteration_size)
-        subset_sampler = SubsetRandomSampler(iter_indices)
+        batch_indices = dataset.get_batch_indices(start_batch, num_batches, batch_size)
+        subset_sampler = SubsetRandomSampler(batch_indices)
         dataloader = DataLoader(
             dataset, batch_size=batch_size, sampler=subset_sampler, **dataloader_kwargs
         )
