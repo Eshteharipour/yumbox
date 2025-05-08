@@ -511,7 +511,11 @@ class ContrastiveSampler(Sampler):
 
 
 def calculate_num_iterations(
-    dataset_size: int, batch_size: int, batches_per_iteration: int
+    dataset_size: int,
+    batch_size: int,
+    batches_per_iteration: int,
+    drop_last_batch=True,
+    drop_last_iteration=False,
 ) -> int:
     """
     Calculate the total number of iterations per epoch.
@@ -520,14 +524,23 @@ def calculate_num_iterations(
         dataset_size: Total number of samples in the dataset
         batch_size: Number of samples per batch
         batches_per_iteration: Number of batches per iteration
+        drop_last_batch: If True, drop the last incomplete batch; if False, include it
+        drop_last_iteration: If True, drop the last incomplete iteration; if False, include it
 
     Returns:
         Number of iterations required to cover the dataset
     """
-    total_batches = (dataset_size + batch_size - 1) // batch_size  # Ceiling division
-    num_iterations = (
-        total_batches + batches_per_iteration - 1
-    ) // batches_per_iteration
+    if drop_last_batch:
+        total_batches = dataset_size // batch_size
+    else:
+        total_batches = (dataset_size + batch_size - 1) // batch_size
+
+    if drop_last_iteration:
+        num_iterations = total_batches // batches_per_iteration
+    else:
+        num_iterations = (
+            total_batches + batches_per_iteration - 1
+        ) // batches_per_iteration
     return num_iterations
 
 
