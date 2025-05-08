@@ -585,9 +585,6 @@ def get_dataloader(
         iteration = 0
         epoch = epoch + 1
 
-    # Set epoch to ensure consistent shuffling
-    dataset.set_epoch(epoch)
-
     # Calculate which batches belong to this iteration
     start_batch = iteration * batches_per_iteration
     end_batch = min(
