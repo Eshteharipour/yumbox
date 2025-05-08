@@ -588,34 +588,26 @@ def get_dataloader(
     # Set epoch to ensure consistent shuffling
     dataset.set_epoch(epoch)
 
-    # Calculate actual number of samples for this iteration
-    # First, determine how many total batches are in the dataset
-    if drop_last_batch:
-        total_batches = dataset.dataset_size // batch_size
-    else:
-        total_batches = (dataset.dataset_size + batch_size - 1) // batch_size
-
     # Calculate which batches belong to this iteration
     start_batch = iteration * batches_per_iteration
     end_batch = start_batch + batches_per_iteration
 
-    # If this is the last iteration and we're dropping incomplete iterations
-    if drop_last_iteration and end_batch > total_batches:
-        end_batch = start_batch  # No batches processed
-    else:
-        end_batch = min(end_batch, total_batches)  # Cap at the available batches
+    # Calculate actual number of samples for this iteration
+    # First, determine how many total batches are in the dataset
+    if drop_last_batch and drop_last_iteration:
+        total_samples = total_iterations * batches_per_iteration * batch_size
 
-    # Calculate sample indices for these batches
-    start_idx = start_batch * batch_size
+        start_batch = iteration * batches_per_iteration
+        end_batch = start_batch + batches_per_iteration
 
-    # For the end index, we need to handle the last batch specially if we're not dropping it
-    if end_batch == total_batches and not drop_last_batch:
-        end_idx = dataset.dataset_size  # Include all remaining samples
-    else:
+        start_idx = start_batch * batch_size
         end_idx = end_batch * batch_size
-
-    # Calculate total samples
-    total_samples = max(0, end_idx - start_idx)
+    elif drop_last_batch:
+        pass
+    elif drop_last_iteration:
+        pass
+    else:
+        pass
 
     # Log training metadata to MLflow
     params_dict = {
