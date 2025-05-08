@@ -588,6 +588,35 @@ def get_dataloader(
     # Set epoch to ensure consistent shuffling
     dataset.set_epoch(epoch)
 
+    # Calculate actual number of samples for this iteration
+    # First, determine how many total batches are in the dataset
+    if drop_last_batch:
+        total_batches = dataset.dataset_size // batch_size
+    else:
+        total_batches = (dataset.dataset_size + batch_size - 1) // batch_size
+
+    # Calculate which batches belong to this iteration
+    start_batch = iteration * batches_per_iteration
+    end_batch = start_batch + batches_per_iteration
+
+    # If this is the last iteration and we're dropping incomplete iterations
+    if drop_last_iteration and end_batch > total_batches:
+        end_batch = start_batch  # No batches processed
+    else:
+        end_batch = min(end_batch, total_batches)  # Cap at the available batches
+
+    # Calculate sample indices for these batches
+    start_idx = start_batch * batch_size
+
+    # For the end index, we need to handle the last batch specially if we're not dropping it
+    if end_batch == total_batches and not drop_last_batch:
+        end_idx = dataset.dataset_size  # Include all remaining samples
+    else:
+        end_idx = end_batch * batch_size
+
+    # Calculate total samples
+    total_samples = max(0, end_idx - start_idx)
+
     # Log training metadata to MLflow
     params_dict = {
         "epoch": epoch,
@@ -596,21 +625,15 @@ def get_dataloader(
         "batches_per_iteration": batches_per_iteration,
         "total_iterations": total_iterations,
         "dataset_size": dataset.dataset_size,
-        "total_samples": batches_per_iteration * batch_size,
+        "total_samples": total_samples,
     }
 
     # Verify dataset size hasn't changed
     dataset.verify_dataset_size(dataset_size)
 
     if sampler is None:
-        # Calculate the starting batch and sample indices
-        start_batch = iteration * batches_per_iteration
-        start_idx = start_batch * batch_size
-        end_idx = min(
-            start_idx + (batches_per_iteration * batch_size), dataset.dataset_size
-        )
+        # Create batch indices for this iteration
         batch_indices = np.arange(start_idx, end_idx)
-
         # Create a subset for this iteration
         subset = Subset(dataset, batch_indices)
         dataloader = DataLoader(subset, batch_size=batch_size, **dataloader_kwargs)
