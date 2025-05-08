@@ -1,125 +1,93 @@
-import numpy as np
-import pandas as pd
-from torch.utils.data import Dataset, DataLoader, Sampler, SubsetRandomSampler
-import mlflow
-import warnings
-from typing import Any
-from collections.abc import Callable
 import random
+import warnings
+from collections.abc import Callable
+from typing import Any, Literal
+
+import albumentations as A
+import mlflow
+import numpy as np
+import torch
+import torchvision.transforms.functional as F
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset, Sampler, Subset
+from torchvision.transforms.transforms import Compose
+
+
+def MaybeToTensor(image: np.ndarray | torch.Tensor):
+    if isinstance(image, torch.Tensor):
+        return image
+    return F.to_tensor(image)
 
 
 class FlexibleDataset(Dataset):
     def __init__(
         self,
-        dataframe: pd.DataFrame,
-        preprocessors: dict[str, Callable] = None,
-        mode: str = "default",
-        image_column: str = "path",
-        text_column: str = "name",
+        texts: np.ndarray | list,
+        images: np.ndarray | list,
+        mode: Literal["text", "image", "text_image"],
+        txt_callables: list[Callable] = None,
+        img_callables: list[Callable] = None,
     ):
-        """
-        A flexible dataset that supports consistent shuffling and iteration tracking.
-
-        Args:
-            dataframe: Input dataframe containing data paths/text/features
-            preprocessors: dict of preprocessing functions for different column types
-            mode: Mode for preprocessing ('image', 'text', 'multimodal', 'default')
-            image_column: Column name for image paths
-            text_column: Column name for text data
-        """
-        self.df = dataframe
-        self.preprocessors = preprocessors or {}
+        self.texts = texts
+        self.images = images
         self.mode = mode
-        self.image_column = image_column
-        self.text_column = text_column
-        self.dataset_size = len(dataframe)
+        self.txt_callables = txt_callables
+        self.img_callables = img_callables
+
+        if mode == "text_image":
+            assert len(self.texts) == len(self.images)
+
+        self.dataset_size = len(self.texts)
         self._original_indices = np.arange(self.dataset_size)
         self._shuffled_indices = self._original_indices.copy()
-        self.current_epoch = 0
 
     def __len__(self) -> int:
         return self.dataset_size
 
-    def __getitem__(self, idx: int) -> dict[str, Any]:
-        # Get actual index from shuffled indices if needed
-        actual_idx = self._shuffled_indices[idx]
-        row = self.df.iloc[actual_idx]
+    def get_text(self, idx: int) -> np.ndarray | torch.Tensor:
+        text = self.texts[idx]
+        if self.txt_callables is not None:
+            for callable in self.txt_callables:
+                text = callable(text)
+        return text
 
-        # Apply appropriate preprocessors based on mode
-        if (
-            self.mode == "image"
-            and "image" in self.preprocessors
-            and self.image_column in row
-        ):
-            return {
-                "image": self.preprocessors["image"](row[self.image_column]),
-                "label": row.get("label", None),
-                "index": actual_idx,
-            }
-        elif (
-            self.mode == "text"
-            and "text" in self.preprocessors
-            and self.text_column in row
-        ):
-            return {
-                "text": self.preprocessors["text"](row[self.text_column]),
-                "label": row.get("label", None),
-                "index": actual_idx,
-            }
-        elif self.mode == "multimodal":
-            result = {"index": actual_idx}
+    def get_image(self, idx: int) -> np.ndarray | torch.Tensor:
+        image_path = self.images[idx]
+        image = Image.open(image_path).convert("RGB")
+        if self.img_callables is not None:
+            for callable in self.img_callables:
+                # Check if transform is from torchvision
+                if isinstance(callable, Compose):
+                    # Convert PIL image to tensor if needed for torchvision
+                    image = callable(image)
+                # Check if transform is from albumentations
+                elif isinstance(callable, A.Compose):
+                    # Convert PIL image to numpy array for albumentations
+                    image_np = np.array(image)
+                    # Apply albumentations transform
+                    augmented = callable(image=image_np)
+                    image = augmented["image"]
+                else:
+                    # Assume callable is a custom function
+                    image = callable(image)
+        return image
 
-            # Process image if available
-            if "image" in self.preprocessors and self.image_column in row:
-                result["image"] = self.preprocessors["image"](row[self.image_column])
-
-            # Process text if available
-            if "text" in self.preprocessors and self.text_column in row:
-                result["text"] = self.preprocessors["text"](row[self.text_column])
-
-            # Add label if available
-            if "label" in row:
-                result["label"] = row["label"]
-
-            return result
-        else:  # default mode
-            # Just return the row as a dict with index
-            return {**row.to_dict(), "index": actual_idx}
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        idx = self._shuffled_indices[index]
+        if self.mode == "text":
+            return self.get_text(idx)
+        if self.mode == "image":
+            return self.get_image(idx)
+        elif self.mode == "text_image":
+            return self.get_text(idx), self.get_image(idx)
 
     def set_epoch(self, epoch: int) -> None:
-        """Set the current epoch and update shuffle state."""
-        if epoch != self.current_epoch:
-            self.current_epoch = epoch
-            # Use epoch as random seed to ensure consistent shuffling within epoch
-            rng = np.random.RandomState(seed=epoch)
-            self._shuffled_indices = self._original_indices.copy()
-            rng.shuffle(self._shuffled_indices)
-
-    def get_batch_indices(
-        self, batch_start: int, num_batches: int, batch_size: int
-    ) -> np.ndarray:
+        """Set the current epoch and update shuffle state.
+        Use epoch as random seed to ensure consistent shuffling within epoch
         """
-        Get indices for specific batches within the current epoch.
-
-        Args:
-            batch_start: The starting batch number (0-indexed)
-            num_batches: Number of batches to include
-            batch_size: Size of each batch
-
-        Returns:
-            Numpy array of indices for these batches
-        """
-        # Calculate sample indices
-        start_idx = batch_start * batch_size
-        end_idx = min(start_idx + (num_batches * batch_size), self.dataset_size)
-
-        if start_idx >= self.dataset_size:
-            warnings.warn(
-                f"Batch {batch_start} exceeds dataset size. Returning empty array."
-            )
-            return np.array([], dtype=np.int64)
-
-        return np.arange(start_idx, end_idx, dtype=np.int64)
+        rng = np.random.RandomState(seed=epoch)
+        self._shuffled_indices = self._original_indices.copy()
+        rng.shuffle(self._shuffled_indices)
 
     def verify_dataset_size(self, expected_size: int) -> bool:
         """Verify that dataset size hasn't changed."""
@@ -542,11 +510,32 @@ class ContrastiveSampler(Sampler):
         return len(self.dataset)
 
 
+def calculate_num_iterations(
+    dataset_size: int, batch_size: int, batches_per_iteration: int
+) -> int:
+    """
+    Calculate the total number of iterations per epoch.
+
+    Args:
+        dataset_size: Total number of samples in the dataset
+        batch_size: Number of samples per batch
+        batches_per_iteration: Number of batches per iteration
+
+    Returns:
+        Number of iterations required to cover the dataset
+    """
+    total_batches = (dataset_size + batch_size - 1) // batch_size  # Ceiling division
+    num_iterations = (
+        total_batches + batches_per_iteration - 1
+    ) // batches_per_iteration
+    return num_iterations
+
+
 def get_dataloader(
     dataset: FlexibleDataset,
     epoch: int,
-    start_batch: int, 
-    num_batches: int, 
+    iteration: int,
+    batches_per_iteration: int,
     batch_size: int,
     sampler: Sampler | None = None,
     **dataloader_kwargs,
@@ -557,8 +546,8 @@ def get_dataloader(
     Args:
         dataset: FlexibleDataset instance
         epoch: Current epoch number
-        iteration: Starting batch number within the epoch (0-indexed)
-        iteration_size: Number of batches to include in this iteration
+        iteration: Starting iteration number within the epoch (0-indexed)
+        batches_per_iteration: Number of batches to include in this iteration
         batch_size: Batch size for training
         sampler: Optional sampler to use for this iteration
         dataloader_kwargs: Additional arguments for DataLoader
@@ -570,12 +559,14 @@ def get_dataloader(
     dataset.set_epoch(epoch)
 
     # Log training metadata to MLflow
-    mlflow.log_param("epoch", epoch)
-    mlflow.log_param("start_batch", start_batch)
-    mlflow.log_param("num_batches", num_batches)
-    mlflow.log_param("batch_size", batch_size)
-    mlflow.log_param("total_samples", num_batches * batch_size)
-    mlflow.log_param("dataset_size", dataset.dataset_size)
+    params_dict = {
+        "epoch": epoch,
+        "iteration": iteration,
+        "batches_per_iteration": batches_per_iteration,
+        "batch_size": batch_size,
+        "total_samples": batches_per_iteration * batch_size,
+        "dataset_size": dataset.dataset_size,
+    }
 
     # Verify dataset size hasn't changed
     expected_size = (
@@ -585,12 +576,19 @@ def get_dataloader(
     )
     dataset.verify_dataset_size(expected_size)
 
-    # If no sampler provided, get indices for these batches
     if sampler is None:
-        batch_indices = dataset.get_batch_indices(start_batch, num_batches, batch_size)
-        subset_sampler = SubsetRandomSampler(batch_indices)
+        # Calculate the starting batch and sample indices
+        start_batch = iteration * batches_per_iteration
+        start_idx = start_batch * batch_size
+        end_idx = min(
+            start_idx + (batches_per_iteration * batch_size), dataset.dataset_size
+        )
+        batch_indices = np.arange(start_idx, end_idx)
+
+        # Create a subset for this iteration
+        subset = Subset(dataset, batch_indices)
         dataloader = DataLoader(
-            dataset, batch_size=batch_size, sampler=subset_sampler, **dataloader_kwargs
+            subset, batch_size=batch_size, shuffle=False, **dataloader_kwargs
         )
     else:
         # Use the provided sampler
@@ -598,4 +596,4 @@ def get_dataloader(
             dataset, batch_size=batch_size, sampler=sampler, **dataloader_kwargs
         )
 
-    return dataloader
+    return dataloader, params_dict
