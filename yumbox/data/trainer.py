@@ -4,7 +4,6 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 import albumentations as A
-import mlflow
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
@@ -548,11 +547,14 @@ def get_dataloader(
     dataset: FlexibleDataset,
     epoch: int,
     iteration: int,
-    batches_per_iteration: int,
     batch_size: int,
+    dataset_size: int,
+    batches_per_iteration: int,
     sampler: Sampler | None = None,
+    drop_last_batch=True,
+    drop_last_iteration=False,
     **dataloader_kwargs,
-) -> DataLoader:
+) -> tuple[DataLoader, dict]:
     """
     Get dataloader for a specific set of batches within an epoch.
 
@@ -560,14 +562,29 @@ def get_dataloader(
         dataset: FlexibleDataset instance
         epoch: Current epoch number
         iteration: Starting iteration number within the epoch (0-indexed)
-        batches_per_iteration: Number of batches to include in this iteration
         batch_size: Batch size for training
+        batches_per_iteration: Number of batches to include in this iteration
         sampler: Optional sampler to use for this iteration
+        drop_last_batch: If True, drop the last incomplete batch; if False, include it
+        drop_last_iteration: If True, drop the last incomplete iteration; if False, include it
         dataloader_kwargs: Additional arguments for DataLoader
 
     Returns:
-        DataLoader configured for the requested batches
+        Tuple of (DataLoader configured for the requested batches, params dictionary)
     """
+    # Calculate total number of iterations using calculate_num_iterations
+    total_iterations = calculate_num_iterations(
+        dataset_size=dataset.dataset_size,
+        batch_size=batch_size,
+        batches_per_iteration=batches_per_iteration,
+        drop_last_batch=drop_last_batch,
+        drop_last_iteration=drop_last_iteration,
+    )
+
+    if iteration > total_iterations:
+        iteration = 0
+        epoch = epoch + 1
+
     # Set epoch to ensure consistent shuffling
     dataset.set_epoch(epoch)
 
@@ -575,19 +592,15 @@ def get_dataloader(
     params_dict = {
         "epoch": epoch,
         "iteration": iteration,
-        "batches_per_iteration": batches_per_iteration,
         "batch_size": batch_size,
-        "total_samples": batches_per_iteration * batch_size,
+        "batches_per_iteration": batches_per_iteration,
+        "total_iterations": total_iterations,
         "dataset_size": dataset.dataset_size,
+        "total_samples": batches_per_iteration * batch_size,
     }
 
     # Verify dataset size hasn't changed
-    expected_size = (
-        mlflow.get_param("dataset_size")
-        if mlflow.get_param("dataset_size")
-        else dataset.dataset_size
-    )
-    dataset.verify_dataset_size(expected_size)
+    dataset.verify_dataset_size(dataset_size)
 
     if sampler is None:
         # Calculate the starting batch and sample indices
@@ -600,9 +613,7 @@ def get_dataloader(
 
         # Create a subset for this iteration
         subset = Subset(dataset, batch_indices)
-        dataloader = DataLoader(
-            subset, batch_size=batch_size, shuffle=False, **dataloader_kwargs
-        )
+        dataloader = DataLoader(subset, batch_size=batch_size, **dataloader_kwargs)
     else:
         # Use the provided sampler
         dataloader = DataLoader(
