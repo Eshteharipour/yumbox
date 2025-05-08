@@ -21,9 +21,9 @@ def MaybeToTensor(image: np.ndarray | torch.Tensor):
 class FlexibleDataset(Dataset):
     def __init__(
         self,
-        texts: np.ndarray | list,
-        images: np.ndarray | list,
         mode: Literal["text", "image", "text_image"],
+        texts: np.ndarray | list | None = None,
+        images: np.ndarray | list | None = None,
         txt_callables: list[Callable] = None,
         img_callables: list[Callable] = None,
     ):
