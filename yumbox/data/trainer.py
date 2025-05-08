@@ -581,7 +581,7 @@ def get_dataloader(
         drop_last_iteration=drop_last_iteration,
     )
 
-    if iteration > total_iterations:
+    if iteration >= total_iterations:
         iteration = 0
         epoch = epoch + 1
 
@@ -590,24 +590,20 @@ def get_dataloader(
 
     # Calculate which batches belong to this iteration
     start_batch = iteration * batches_per_iteration
-    end_batch = start_batch + batches_per_iteration
+    end_batch = min(
+        start_batch + batches_per_iteration,
+        (
+            dataset.dataset_size // batch_size
+            if drop_last_batch
+            else (dataset.dataset_size + batch_size - 1) // batch_size
+        ),
+    )
 
     # Calculate actual number of samples for this iteration
-    # First, determine how many total batches are in the dataset
-    if drop_last_batch and drop_last_iteration:
-        total_samples = total_iterations * batches_per_iteration * batch_size
+    start_idx = start_batch * batch_size
+    end_idx = min(end_batch * batch_size, dataset.dataset_size)
 
-        start_batch = iteration * batches_per_iteration
-        end_batch = start_batch + batches_per_iteration
-
-        start_idx = start_batch * batch_size
-        end_idx = end_batch * batch_size
-    elif drop_last_batch:
-        pass
-    elif drop_last_iteration:
-        pass
-    else:
-        pass
+    total_samples = end_idx - start_idx
 
     # Log training metadata to MLflow
     params_dict = {
