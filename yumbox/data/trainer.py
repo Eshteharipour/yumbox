@@ -509,40 +509,6 @@ class ContrastiveSampler(Sampler):
         return len(self.dataset)
 
 
-def calculate_num_iterations(
-    dataset_size: int,
-    batch_size: int,
-    batches_per_iteration: int,
-    drop_last_batch=True,
-    drop_last_iteration=False,
-) -> int:
-    """
-    Calculate the total number of iterations per epoch.
-
-    Args:
-        dataset_size: Total number of samples in the dataset
-        batch_size: Number of samples per batch
-        batches_per_iteration: Number of batches per iteration
-        drop_last_batch: If True, drop the last incomplete batch; if False, include it
-        drop_last_iteration: If True, drop the last incomplete iteration; if False, include it
-
-    Returns:
-        Number of iterations required to cover the dataset
-    """
-    if drop_last_batch:
-        total_batches = dataset_size // batch_size
-    else:
-        total_batches = (dataset_size + batch_size - 1) // batch_size
-
-    if drop_last_iteration:
-        num_iterations = total_batches // batches_per_iteration
-    else:
-        num_iterations = (
-            total_batches + batches_per_iteration - 1
-        ) // batches_per_iteration
-    return num_iterations
-
-
 def get_dataloader(
     dataset: FlexibleDataset,
     epoch: int,
@@ -550,59 +516,36 @@ def get_dataloader(
     batch_size: int,
     dataset_size: int,
     batches_per_iteration: int,
-    sampler: Sampler | None = None,
     drop_last_batch=True,
     drop_last_iteration=False,
     **dataloader_kwargs,
 ) -> tuple[DataLoader, dict]:
-    """
-    Get dataloader for a specific set of batches within an epoch.
+    # Calculate total batches in the dataset
+    if drop_last_batch:
+        total_batches = dataset_size // batch_size
+    else:
+        total_batches = (dataset_size + batch_size - 1) // batch_size
 
-    Args:
-        dataset: FlexibleDataset instance
-        epoch: Current epoch number
-        iteration: Starting iteration number within the epoch (0-indexed)
-        batch_size: Batch size for training
-        batches_per_iteration: Number of batches to include in this iteration
-        sampler: Optional sampler to use for this iteration
-        drop_last_batch: If True, drop the last incomplete batch; if False, include it
-        drop_last_iteration: If True, drop the last incomplete iteration; if False, include it
-        dataloader_kwargs: Additional arguments for DataLoader
+    if drop_last_iteration:
+        total_iterations = total_batches // batches_per_iteration
+    else:
+        total_iterations = (
+            total_batches + batches_per_iteration - 1
+        ) // batches_per_iteration
 
-    Returns:
-        Tuple of (DataLoader configured for the requested batches, params dictionary)
-    """
-    # Calculate total number of iterations using calculate_num_iterations
-    total_iterations = calculate_num_iterations(
-        dataset_size=dataset.dataset_size,
-        batch_size=batch_size,
-        batches_per_iteration=batches_per_iteration,
-        drop_last_batch=drop_last_batch,
-        drop_last_iteration=drop_last_iteration,
-    )
-
-    if iteration >= total_iterations:
-        iteration = 0
-        epoch = epoch + 1
-
-    # Calculate which batches belong to this iteration
+    # Calculate batch indices for this iteration
     start_batch = iteration * batches_per_iteration
-    end_batch = min(
-        start_batch + batches_per_iteration,
-        (
-            dataset.dataset_size // batch_size
-            if drop_last_batch
-            else (dataset.dataset_size + batch_size - 1) // batch_size
-        ),
-    )
-
-    # Calculate actual number of samples for this iteration
+    end_batch = min(start_batch + batches_per_iteration, total_batches)
     start_idx = start_batch * batch_size
-    end_idx = min(end_batch * batch_size, dataset.dataset_size)
+    end_idx = min(end_batch * batch_size, dataset_size)
+
+    # Ensure indices are valid
+    if start_idx >= dataset_size:
+        raise ValueError(f"Start index {start_idx} exceeds dataset size {dataset_size}")
 
     total_samples = end_idx - start_idx
 
-    # Log training metadata to MLflow
+    # Log metadata
     params_dict = {
         "epoch": epoch,
         "iteration": iteration,
@@ -613,19 +556,17 @@ def get_dataloader(
         "total_samples": total_samples,
     }
 
-    # Verify dataset size hasn't changed
+    # Verify dataset size
     dataset.verify_dataset_size(dataset_size)
 
-    if sampler is None:
-        # Create batch indices for this iteration
-        batch_indices = np.arange(start_idx, end_idx)
-        # Create a subset for this iteration
-        subset = Subset(dataset, batch_indices)
-        dataloader = DataLoader(subset, batch_size=batch_size, **dataloader_kwargs)
-    else:
-        # Use the provided sampler
-        dataloader = DataLoader(
-            dataset, batch_size=batch_size, sampler=sampler, **dataloader_kwargs
-        )
+    # Create subset for this iteration
+    batch_indices = np.arange(start_idx, end_idx)
+    subset = Subset(dataset, batch_indices)
+    dataloader = DataLoader(
+        subset,
+        batch_size=batch_size,
+        shuffle=False,  # Shuffling handled by dataset.set_epoch
+        **dataloader_kwargs,
+    )
 
     return dataloader, params_dict
