@@ -510,12 +510,12 @@ class ContrastiveSampler(Sampler):
 
 
 def get_dataloader(
-    dataset: FlexibleDataset,
-    epoch: int,
-    iteration: int,
-    batch_size: int,
-    dataset_size: int,
-    batches_per_iteration: int,
+    dataset,
+    full_epoch,
+    iteration,
+    batch_size,
+    dataset_size,
+    batches_per_iteration,
     drop_last_batch=True,
     drop_last_iteration=False,
     **dataloader_kwargs,
@@ -547,7 +547,7 @@ def get_dataloader(
 
     # Log metadata
     params_dict = {
-        "epoch": epoch,
+        "epoch": full_epoch,
         "iteration": iteration,
         "batch_size": batch_size,
         "batches_per_iteration": batches_per_iteration,
