@@ -84,11 +84,11 @@ class FlexibleDataset(Dataset):
         elif self.mode == "text_image":
             return (self.get_text(idx), self.get_image(idx)), lab
 
-    def set_epoch(self, full_epoch: int) -> None:
-        """Set the current full_epoch and update shuffle state.
-        Use full_epoch as random seed to ensure consistent shuffling within full_epoch
+    def set_epoch(self, epoch: int) -> None:
+        """Set the current epoch and update shuffle state.
+        Use epoch as random seed to ensure consistent shuffling within epoch
         """
-        rng = np.random.RandomState(seed=full_epoch)
+        rng = np.random.RandomState(seed=epoch)
         self._shuffled_indices = self._original_indices.copy()
         rng.shuffle(self._shuffled_indices)
 
@@ -135,7 +135,7 @@ class ClusterSampler(Sampler):
             self.clusters[cluster_id].append(i)
 
     def __iter__(self):
-        # Set random seed based on full_epoch for consistent shuffling
+        # Set random seed based on epoch for consistent shuffling
         random.seed(self.dataset.current_epoch)
 
         # Shuffle indices within each cluster
@@ -248,7 +248,7 @@ class TripletSampler(Sampler):
             )
 
     def __iter__(self):
-        # Set random seed based on full_epoch for consistent shuffling
+        # Set random seed based on epoch for consistent shuffling
         random.seed(self.dataset.current_epoch)
 
         # Calculate number of triplets
@@ -347,7 +347,7 @@ class SiameseSampler(Sampler):
             )
 
     def __iter__(self):
-        # Set random seed based on full_epoch for consistent shuffling
+        # Set random seed based on epoch for consistent shuffling
         random.seed(self.dataset.current_epoch)
 
         # Calculate number of pairs
@@ -462,7 +462,7 @@ class ContrastiveSampler(Sampler):
             self.num_classes_per_batch = len(self.valid_labels)
 
     def __iter__(self):
-        # Set random seed based on full_epoch for consistent shuffling
+        # Set random seed based on epoch for consistent shuffling
         random.seed(self.dataset.current_epoch)
 
         # Shuffle the order of labels
@@ -514,12 +514,12 @@ class ContrastiveSampler(Sampler):
 
 
 def get_dataloader(
-    dataset,
-    full_epoch,
-    iteration,
-    batch_size,
-    batches_per_iteration,
-    dataset_size=None,
+    dataset: Dataset,
+    epoch: int,
+    iteration: int,
+    batch_size: int,
+    batches_per_iteration: int,
+    dataset_size: int | None = None,
     drop_last_batch=True,
     drop_last_iteration=False,
     **dataloader_kwargs,
@@ -542,7 +542,7 @@ def get_dataloader(
 
     if iteration >= total_iterations:
         iteration = 0
-        full_epoch = full_epoch + 1
+        epoch = epoch + 1
 
     # Calculate batch indices for this iteration
     start_batch = iteration * batches_per_iteration
@@ -559,7 +559,7 @@ def get_dataloader(
 
     # Log metadata
     params_dict = {
-        "full_epoch": full_epoch,
+        "epoch": epoch,
         "iteration": iteration,
         "batch_size": batch_size,
         "batches_per_iteration": batches_per_iteration,
