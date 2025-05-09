@@ -514,7 +514,7 @@ class ContrastiveSampler(Sampler):
         return len(self.dataset)
 
 
-def get_dataloader(
+def get_subset(
     dataset: Dataset,
     epoch: int,
     iteration: int,
@@ -523,7 +523,6 @@ def get_dataloader(
     dataset_size: int | None = None,
     drop_last_batch=True,
     drop_last_iteration=False,
-    **dataloader_kwargs,
 ) -> tuple[DataLoader, dict]:
     if dataset_size is None:
         dataset_size = len(dataset)
@@ -541,6 +540,8 @@ def get_dataloader(
             total_batches + batches_per_iteration - 1
         ) // batches_per_iteration
 
+    # Next run
+    iteration += 1
     if iteration >= total_iterations:
         iteration = 0
         epoch = epoch + 1
@@ -568,11 +569,21 @@ def get_dataloader(
         "total_iterations": total_iterations,
         "dataset_size": dataset_size,
         "total_samples": total_samples,
+        "start_batch": start_batch,
+        "end_batch": end_batch,
+        "start_idx": start_idx,
+        "end_idx": end_idx,
     }
 
     # Verify dataset size
     dataset.verify_dataset_size(dataset_size)
 
+    return params_dict
+
+
+def get_dataloader(
+    dataset: Dataset, start_idx: int, end_idx: int, batch_size: int, **dataloader_kwargs
+):
     # Create subset for this iteration
     batch_indices = np.arange(start_idx, end_idx)
     subset = Subset(dataset, batch_indices)
@@ -583,4 +594,4 @@ def get_dataloader(
         **dataloader_kwargs,
     )
 
-    return dataloader, params_dict
+    return dataloader
