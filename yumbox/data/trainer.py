@@ -24,6 +24,7 @@ class FlexibleDataset(Dataset):
         mode: Literal["text", "image", "text_image"],
         texts: np.ndarray | list | None = None,
         images: np.ndarray | list | None = None,
+        labels: np.ndarray | list | None = None,
         txt_callables: list[Callable] = None,
         img_callables: list[Callable] = None,
     ):
@@ -33,13 +34,11 @@ class FlexibleDataset(Dataset):
         self.txt_callables = txt_callables
         self.img_callables = img_callables
 
-        if mode == "text":
-            self.dataset_size = len(self.texts)
-        else:
-            self.dataset_size = len(self.images)
-
         if mode == "text_image":
             assert len(self.texts) == len(self.images)
+
+        self.dataset_size = len(self.texts) if mode == "text" else len(self.images)
+        self.labels = np.arange(self.dataset_size) if labels is None else labels
 
         self._original_indices = np.arange(self.dataset_size)
         self._shuffled_indices = self._original_indices.copy()
@@ -77,12 +76,13 @@ class FlexibleDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         idx = self._shuffled_indices[index]
+        lab = self.labels[idx]
         if self.mode == "text":
-            return self.get_text(idx)
+            return self.get_text(idx), lab
         if self.mode == "image":
-            return self.get_image(idx)
+            return self.get_image(idx), lab
         elif self.mode == "text_image":
-            return self.get_text(idx), self.get_image(idx)
+            return (self.get_text(idx), self.get_image(idx)), lab
 
     def set_epoch(self, epoch: int) -> None:
         """Set the current epoch and update shuffle state.
