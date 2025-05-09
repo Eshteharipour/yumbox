@@ -540,6 +540,10 @@ def get_dataloader(
             total_batches + batches_per_iteration - 1
         ) // batches_per_iteration
 
+    if iteration >= total_iterations:
+        iteration = 0
+        full_epoch = full_epoch + 1
+
     # Calculate batch indices for this iteration
     start_batch = iteration * batches_per_iteration
     end_batch = min(start_batch + batches_per_iteration, total_batches)
