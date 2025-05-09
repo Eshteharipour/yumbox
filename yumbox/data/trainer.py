@@ -33,10 +33,14 @@ class FlexibleDataset(Dataset):
         self.txt_callables = txt_callables
         self.img_callables = img_callables
 
+        if mode == "text":
+            self.dataset_size = len(self.texts)
+        else:
+            self.dataset_size = len(self.images)
+
         if mode == "text_image":
             assert len(self.texts) == len(self.images)
 
-        self.dataset_size = len(self.texts)
         self._original_indices = np.arange(self.dataset_size)
         self._shuffled_indices = self._original_indices.copy()
 
