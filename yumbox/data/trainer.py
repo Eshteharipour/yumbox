@@ -88,7 +88,8 @@ class FlexibleDataset(Dataset):
         """Set the current epoch and update shuffle state.
         Use epoch as random seed to ensure consistent shuffling within epoch
         """
-        rng = np.random.RandomState(seed=epoch)
+        # rng = np.random.RandomState(seed=epoch)
+        rng = np.random.default_rng(epoch)
         self._shuffled_indices = self._original_indices.copy()
         rng.shuffle(self._shuffled_indices)
 
