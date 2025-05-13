@@ -197,7 +197,7 @@ def run_all_configs(
                     elif readable_pipe == process.stderr:
                         error = readable_pipe.readline()
                         if error:
-                            logger.info(f"Error: {error.strip()}")
+                            logger.info(f"Stderr: {error.strip()}")
 
             # Get any remaining output
             stdout, stderr = process.communicate()
