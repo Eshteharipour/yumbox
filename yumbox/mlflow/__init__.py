@@ -40,10 +40,13 @@ def log_params(cfg: DictConfig, prefix: str | None = None):
 def log_scores_dict(
     scores_dict: dict, name: str | None = None, step: int | None = None
 ):
+    dict_w_name = {}
     for k, v in scores_dict.items():
         if name:
             k = name + "_" + k
         mlflow.log_metric(k, v, step=step)
+        dict_w_name[k] = v
+    return dict_w_name
 
 
 def log_config(cfg: DictConfig, logger: None | Logger):
