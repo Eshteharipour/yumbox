@@ -264,6 +264,48 @@ def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Ru
     #     return None
 
 
+def get_last_run_failed(experiment_name: str) -> Optional[mlflow.entities.Run]:
+    """Find the most recent run and return it if it's failed.
+
+    Args:
+        experiment_name (str): Name of the MLflow experiment
+
+    Returns:
+        Optional[mlflow.entities.Run]: Most recent run if it' has failed or None
+    """
+    logger = BFG["logger"]
+
+    # try:
+    client = MlflowClient()
+    experiment = client.get_experiment_by_name(experiment_name)
+
+    if not experiment:
+        logger.warning(f"Experiment '{experiment_name}' not found")
+        return None
+
+    # Filter for only completed runs
+    runs = client.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+        order_by=["start_time DESC"],
+    )
+
+    if not runs:
+        logger.info(f"No runs found for experiment '{experiment_name}'")
+        return None
+
+    if runs[0].info.status == "FAILED":
+        logger.info(
+            f"Found failed run {runs[0].info.run_id} for experiment '{experiment_name}'"
+        )
+        return runs[0]
+    # except Exception as e:
+    #     logger.error(
+    #         f"Error retrieving last run for '{experiment_name}': {str(e)}"
+    #     )
+    #     return None
+
+
 def set_tracking_uri(path: str):
     # If path is absolute
     if path.startswith("/"):
