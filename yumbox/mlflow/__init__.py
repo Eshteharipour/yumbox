@@ -322,3 +322,5 @@ def set_tracking_uri(path: str):
         mlflow_path = os.path.join(main_file, path)
         os.makedirs(mlflow_path, exist_ok=True)
         mlflow.set_tracking_uri(f"file:{mlflow_path}")
+
+    return mlflow.get_tracking_uri()
