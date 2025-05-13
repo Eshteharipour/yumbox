@@ -166,6 +166,9 @@ def run_all_configs(
         logger.info(f" - {f}")
     logger.info("-" * 50)
 
+    tqdm_default = os.getenv("TQDM_DISABLE")
+    os.environ["TQDM_DISABLE"] = "1"
+
     for config_file in config_files:
         logger.info(f"Starting: {config_file}")
 
@@ -214,6 +217,9 @@ def run_all_configs(
             logger.error(f"Error: {str(e)}")
 
         logger.info("-" * 50)
+
+    if tqdm_default is not None:
+        os.environ["TQDM_DISABLE"] = tqdm_default
 
 
 def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Run]:
