@@ -389,7 +389,8 @@ def plot_metric_across_runs(
             run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
             order_by=["start_time ASC"],
         )
-        df = df[~df["tags.mlflow.parentRunId"].notna()]
+        if "tags.mlflow.parentRunId" in df.columns:
+            df = df[~df["tags.mlflow.parentRunId"].notna()]
     # Handle case where run_ids are provided
     else:
         # Construct filter string to fetch specific finished runs
