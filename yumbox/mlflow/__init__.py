@@ -405,6 +405,10 @@ def plot_metric_across_runs(
             order_by=["start_time ASC"],
         )
 
+    if len(df) == 0:
+        logger.warning(f"No runs found.")
+        return
+
     # Create plot
     fig, ax = plt.subplots()
 
