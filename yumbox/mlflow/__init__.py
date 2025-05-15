@@ -155,6 +155,7 @@ def run_all_configs(
     if disable_tqm:
         os.environ["TQDM_DISABLE"] = "1"
 
+    config_files = []
     if mode == "committed":
         config_files = get_committed_configs(configs_dir, ext)
     elif mode == "all":
