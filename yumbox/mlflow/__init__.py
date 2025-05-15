@@ -49,16 +49,23 @@ def log_scores_dict(
     return dict_w_name
 
 
-def log_config(cfg: DictConfig, logger: None | Logger):
-    temp_dir = tempfile.mkdtemp()
-    config_path = os.path.join(temp_dir, "config.yaml")
+def log_config(
+    cfg: DictConfig, logger: None | Logger, as_artifact=True, as_params=True
+):
+    if as_artifact:
+        temp_dir = tempfile.mkdtemp()
+        config_path = os.path.join(temp_dir, "config.yaml")
 
-    # OmegaConf.to_yaml(CFG)
-    OmegaConf.save(cfg, config_path)
-    mlflow.log_artifact(config_path)
+        # OmegaConf.to_yaml(CFG)
+        OmegaConf.save(cfg, config_path)
+        mlflow.log_artifact(config_path)
 
-    os.remove(config_path)
-    os.rmdir(temp_dir)
+        os.remove(config_path)
+        os.rmdir(temp_dir)
+
+    if as_params:
+        cfg_dict = OmegaConf.to_container(cfg)
+        mlflow.log_params(cfg_dict)
 
     if logger:
         logger.info(cfg)
