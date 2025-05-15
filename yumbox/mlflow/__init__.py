@@ -259,6 +259,7 @@ def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Ru
         run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
         order_by=["start_time DESC"],
     )
+    runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
 
     if not runs:
         logger.info(f"No successful runs found for experiment '{experiment_name}'")
@@ -300,6 +301,7 @@ def get_last_run_failed(experiment_name: str) -> Optional[mlflow.entities.Run]:
         run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
         order_by=["start_time DESC"],
     )
+    runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
 
     if not runs:
         logger.info(f"No runs found for experiment '{experiment_name}'")
