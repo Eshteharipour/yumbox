@@ -334,3 +334,109 @@ def set_tracking_uri(path: str):
         mlflow.set_tracking_uri(f"file:{mlflow_path}")
 
     return mlflow.get_tracking_uri()
+
+
+def plot_metric_across_runs(
+    metric_key, experiment_name=None, run_ids=None, artifact_file=None
+):
+    """
+    Plots the specified metric across multiple MLflow runs and logs the plot as a figure in MLflow.
+
+    Parameters:
+    - metric_key (str): The key of the metric to plot (e.g., 'train_loss', 'val_accuracy').
+    - experiment_name (str, optional): The name of the experiment to fetch finished runs from.
+    - run_ids (list of str, optional): List of specific run IDs to fetch (only finished runs).
+    - artifact_file (str, optional): The file name to save the plot as in the artifact store.
+                                     Defaults to "{metric_key}_plot.png".
+
+    Raises:
+    - ValueError: If neither experiment_name nor run_ids is provided, or if both are provided,
+                  or if the experiment_name is not found.
+
+    Notes:
+    - The function must be called within an active MLflow run to log the figure.
+    - Only runs with status 'FINISHED' are included.
+    - If a run lacks the specified metric, it is skipped with a warning message.
+    """
+
+    import matplotlib.pyplot as plt
+    import mlflow
+    from mlflow.tracking import MlflowClient
+
+    logger = BFG["logger"]
+
+    # Ensure only one of experiment_name or run_ids is provided
+    if experiment_name is not None and run_ids is not None:
+        logger.error("Specify either experiment_name or run_ids, not both")
+        return
+    if experiment_name is None and run_ids is None:
+        logger.error("Either experiment_name or run_ids must be provided")
+        return
+
+    client = MlflowClient()
+
+    # Handle case where experiment_name is provided
+    if experiment_name is not None:
+        # Get experiment by name
+        experiment = client.get_experiment_by_name(experiment_name)
+        if experiment is None:
+            logger.warning(f"Experiment '{experiment_name}' not found")
+            return
+        experiment_id = experiment.experiment_id
+
+        # Fetch only finished runs from the experiment
+        df = mlflow.search_runs(
+            experiment_ids=[experiment_id],
+            filter_string="status = 'FINISHED'",
+            run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+            order_by=["start_time ASC"],
+        )
+    # Handle case where run_ids are provided
+    else:
+        # Construct filter string to fetch specific finished runs
+        filter_string = (
+            "status = 'FINISHED' AND ("
+            + " OR ".join([f"attribute.run_id = '{run_id}'" for run_id in run_ids])
+            + ")"
+        )
+        df = mlflow.search_runs(
+            filter_string=filter_string,
+            run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+            order_by=["start_time ASC"],
+        )
+
+    # Create plot
+    fig, ax = plt.subplots()
+
+    # Iterate over runs to fetch and plot metric data
+    for _, row in df.iterrows():
+        run_id = row["run_id"]
+        # Use run name if available, otherwise fall back to run_id
+        run_name = row.get("tags.mlflow.runName", run_id)
+        try:
+            metrics = client.get_metric_history(run_id, metric_key)
+            if metrics:
+                # Sort metrics by step to ensure correct order
+                metrics = sorted(metrics, key=lambda m: m.step)
+                steps = [m.step for m in metrics]
+                values = [m.value for m in metrics]
+                ax.plot(steps, values, label=run_name)
+        except Exception as e:
+            logger.warning(f"Error fetching metric for run {run_id}: {e}")
+
+    # Configure and log the plot if there is data to display
+    if ax.get_lines():
+        ax.set_title(f"{metric_key} across runs")
+        ax.set_xlabel("Step")
+        ax.set_ylabel(metric_key)
+        ax.legend()
+        if artifact_file is None:
+            artifact_file = f"{metric_key}_plot.png"
+        mlflow.log_figure(fig, artifact_file)
+    else:
+        logger.warning(
+            f"No runs have the metric {metric_key} or no finished runs found"
+        )
+
+    # Clean up
+    plt.close(fig)
