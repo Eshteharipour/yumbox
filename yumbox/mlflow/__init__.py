@@ -153,6 +153,7 @@ def run_all_configs(
     logger = BFG["logger"]
 
     if disable_tqm:
+        tqdm_default = os.getenv("TQDM_DISABLE")
         os.environ["TQDM_DISABLE"] = "1"
 
     config_files = []
@@ -176,9 +177,6 @@ def run_all_configs(
     for f in config_files:
         logger.info(f" - {f}")
     logger.info("-" * 50)
-
-    tqdm_default = os.getenv("TQDM_DISABLE")
-    os.environ["TQDM_DISABLE"] = "1"
 
     for config_file in config_files:
         logger.info(f"Starting: {config_file}")
@@ -229,7 +227,7 @@ def run_all_configs(
 
         logger.info("-" * 50)
 
-    if tqdm_default is not None:
+    if disable_tqm and tqdm_default is not None:
         os.environ["TQDM_DISABLE"] = tqdm_default
 
 
