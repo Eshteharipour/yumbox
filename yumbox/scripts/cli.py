@@ -16,6 +16,7 @@ def analyze_metrics(args):
         sort_metric=args.sort_metric,
         aggregate_all_runs=args.aggregate_all_runs,
         run_mode=args.run_mode,
+        filter=args.filter,
     )
 
     if df.empty:
@@ -93,6 +94,11 @@ def main():
         choices=["parent", "children", "both"],
         default="both",
         help="Filter runs: 'parent' (parent runs only), 'children' (child runs only), or 'both' (all runs). Default: 'both'.",
+    )
+    analyze_parser.add_argument(
+        "--filter",
+        type=str,
+        help="MLflow filter string to select runs (e.g., \"params.dataset = 'lip'\"). Optional.",
     )
     analyze_parser.add_argument(
         "--output-csv",

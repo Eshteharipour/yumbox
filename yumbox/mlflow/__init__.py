@@ -454,9 +454,10 @@ def process_experiment_metrics(
     sort_metric: str,
     aggregate_all_runs: bool = False,
     run_mode: Literal["parent", "children", "both"] = "both",
+    filter: Optional[str] = None,
 ) -> pd.DataFrame:
     """
-        Process MLflow experiments to calculate mean metrics and sort results.
+    Process MLflow experiments to calculate mean metrics and sort results.
 
     Args:
         storage_path: Path to MLflow storage folder
@@ -466,9 +467,10 @@ def process_experiment_metrics(
         sort_metric: Metric to sort results by
         aggregate_all_runs: If True, get all successful runs; if False, get last run
         run_mode: Filter runs by 'parent', 'children', or 'both'
+        filter: Optional MLflow filter string (e.g., "params.dataset = 'lip'")
 
-        Returns:
-            pandas.DataFrame: Processed metrics with mean and sorted results
+    Returns:
+        pandas.DataFrame: Processed metrics with mean and sorted results
     """
     if run_mode not in ["parent", "children", "both"]:
         raise ValueError(
@@ -490,10 +492,14 @@ def process_experiment_metrics(
     results = []
 
     for exp in experiments:
-        # Get runs based on mode
+        # Get runs based on mode and filter
+        filter_string = "status = 'FINISHED'"
+        if filter:
+            filter_string = f"{filter_string} and {filter}"
+
         runs = client.search_runs(
             experiment_ids=[exp.experiment_id],
-            filter_string="status = 'FINISHED'",
+            filter_string=filter_string,
             run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
             order_by=["start_time DESC"],
         )
