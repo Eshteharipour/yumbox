@@ -33,8 +33,13 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 include = ["yumbox"]
 
+[project.scripts]
+metrics-cli = "yumbox.scripts.cli:main"
+
 [tool.hatch.envs.default.scripts]
 test = "pytest -sv"
+analyze = "python scripts/cli.py analyze {args}"
+generate-docs = "python scripts/generate_docs.py"
 
 [tool.black]
 line-length = 88
