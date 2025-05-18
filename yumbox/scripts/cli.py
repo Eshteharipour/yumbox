@@ -2,6 +2,8 @@
 
 import argparse
 
+import pandas as pd
+
 from yumbox.mlflow import process_experiment_metrics, visualize_metrics
 
 
@@ -22,6 +24,26 @@ def analyze_metrics(args):
     if df.empty:
         print("No data to visualize. Exiting.")
         return
+
+    # Set pandas display options
+    pd.set_option("display.max_columns", None)  # Show all columns
+    pd.set_option("display.max_colwidth", None)  # Show full content of each cell
+    pd.set_option("display.width", None)  # Auto-detect terminal width
+    pd.set_option("display.colheader_justify", "left")
+    try:
+        from tabulate import tabulate
+
+        print(
+            tabulate(
+                df,
+                headers="keys",
+                tablefmt="psql",
+                showindex=False,
+                colalign=("left",),
+            )
+        )
+    except ImportError:
+        print(df)
 
     # Save to CSV if output path is provided
     if args.output_csv:
