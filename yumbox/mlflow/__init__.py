@@ -5,9 +5,11 @@ import tempfile
 from datetime import datetime
 from logging import Logger
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 import mlflow
+import numpy as np
+import pandas as pd
 from mlflow import MlflowClient
 from omegaconf import DictConfig, OmegaConf
 
@@ -255,7 +257,7 @@ def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Ru
         experiment_ids=[experiment.experiment_id],
         filter_string="status = 'FINISHED'",
         run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
-        order_by=["start_time DESC"],
+        order_by=["start_time DESC"],  # new to old
     )
     runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
 
@@ -442,3 +444,174 @@ def plot_metric_across_runs(
 
     # Clean up
     plt.close(fig)
+
+
+def process_experiment_metrics(
+    storage_path: Union[str, Path],
+    select_metrics: list[str],
+    metrics_to_mean: list[str],
+    mean_metric_name: str,
+    sort_metric: str,
+    aggregate_all_runs: bool = False,
+    run_mode: Literal["parent", "children", "both"] = "both",
+) -> pd.DataFrame:
+    """
+        Process MLflow experiments to calculate mean metrics and sort results.
+
+    Args:
+        storage_path: Path to MLflow storage folder
+        select_metrics: List of metric names to collect
+        metrics_to_mean: List of metric names to calculate mean (subset of select_metrics)
+        mean_metric_name: Name for the new mean metric
+        sort_metric: Metric to sort results by
+        aggregate_all_runs: If True, get all successful runs; if False, get last run
+        run_mode: Filter runs by 'parent', 'children', or 'both'
+
+        Returns:
+            pandas.DataFrame: Processed metrics with mean and sorted results
+    """
+    if run_mode not in ["parent", "children", "both"]:
+        raise ValueError(
+            f"Invalid run_mode: {run_mode}. Must be 'parent', 'children', or 'both'."
+        )
+
+    # Set MLflow tracking URI
+    set_tracking_uri(storage_path)
+    client = MlflowClient()
+
+    # Get all active experiments
+    experiments = client.search_experiments(
+        view_type=mlflow.entities.ViewType.ACTIVE_ONLY
+    )
+    if not experiments:
+        print("No active experiments found")
+        return pd.DataFrame()
+
+    results = []
+
+    for exp in experiments:
+        # Get runs based on mode
+        runs = client.search_runs(
+            experiment_ids=[exp.experiment_id],
+            filter_string="status = 'FINISHED'",
+            run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+            order_by=["start_time DESC"],
+        )
+
+        if run_mode == "children":
+            runs = [
+                run
+                for run in runs
+                if "mlflow.parentRunId" in run.data.tags
+                and run.data.tags["mlflow.parentRunId"]
+            ]
+        elif run_mode == "parent":
+            runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
+
+        if aggregate_all_runs is False:
+            runs = runs[:1]
+
+        if not runs:
+            print(f"No runs found for experiment {exp.name} with run_mode {run_mode}")
+            continue
+
+        for run in runs:
+            run_metrics = {}
+            # Collect specified metrics
+            for metric in select_metrics:
+                run_metrics[metric] = run.data.metrics.get(metric, np.nan)
+                continue
+                try:
+                    metric_history = client.get_metric_history(run.info.run_id, metric)
+                    if metric_history:
+                        run_metrics[metric] = metric_history[-1].value
+                except:
+                    run_metrics[metric] = np.nan
+                    print(
+                        f"WARNING: metric {metric} missing "
+                        f"for run with id {run.info.run_id} and name {run.info.run_name} "
+                        f"of experiment with id {exp.experiment_id} name {exp.name}"
+                    )
+
+            # Calculate mean metric if all specified metrics exist
+            if all(metric in run_metrics for metric in metrics_to_mean):
+                mean_value = np.mean([run_metrics[m] for m in metrics_to_mean])
+                run_metrics[mean_metric_name] = mean_value
+            else:
+                missing_metrics = [m for m in metrics_to_mean if m not in run_metrics]
+                print(
+                    f"WARNING: metric(s) {missing_metrics} missing in mean metrics "
+                    f"for run with id {run.info.run_id} and name {run.info.run_name} "
+                    f"of experiment with id {exp.experiment_id} name {exp.name}"
+                )
+
+            # Add experiment and run info
+            run_metrics["experiment_name"] = exp.name
+            run_metrics["run_id"] = run.info.run_id
+            results.append(run_metrics)
+
+    # Create DataFrame and sort
+    if not results:
+        print("No valid runs found with specified metrics")
+        return pd.DataFrame()
+
+    df = pd.DataFrame(results)
+    if sort_metric in df.columns:
+        df = df.sort_values(by=sort_metric, ascending=False)
+    else:
+        print(f"WARNING: sort metric {sort_metric} not valid.")
+
+    return df
+
+
+def visualize_metrics(
+    df: pd.DataFrame,
+    x_metric: str,
+    y_metric: str,
+    color_metric: Optional[str] = None,
+    title: str = "Experiment Metrics Visualization",
+    theme: str = "plotly_dark",
+) -> None:
+    """
+    Visualize metrics using Plotly scatter plot.
+
+    Args:
+        df: DataFrame from process_experiment_metrics
+        x_metric: Metric for x-axis
+        y_metric: Metric for y-axis
+        color_metric: Metric for color scale (optional)
+        title: Plot title
+        theme: Plotly theme (e.g., 'plotly', 'plotly_dark', 'plotly_white')
+    """
+    import plotly.express as px
+    import plotly.io as pio
+
+    if df.empty:
+        print("No data to visualize")
+        return
+
+    if x_metric not in df.columns or y_metric not in df.columns:
+        print(
+            f"Invalid metrics: x_metric={x_metric}, y_metric={y_metric} not in DataFrame"
+        )
+        return
+
+    # Set Plotly theme
+    pio.templates.default = theme
+
+    fig = px.scatter(
+        df,
+        x=x_metric,
+        y=y_metric,
+        color=color_metric,
+        hover_data=df.columns,
+        title=title,
+        labels={
+            x_metric: x_metric.replace("_", " ").title(),
+            y_metric: y_metric.replace("_", " ").title(),
+        },
+    )
+
+    fig.update_traces(marker=dict(size=12))
+    fig.update_layout(showlegend=True)
+    fig.show()
