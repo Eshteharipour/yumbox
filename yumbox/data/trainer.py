@@ -103,6 +103,161 @@ class FlexibleDataset(Dataset):
         return True
 
 
+class FlexiblePairDataset(FlexibleDataset):
+    def __init__(
+        self,
+        mode: Literal["text_pair", "image_pair", "text_image_pair"],
+        texts1: np.ndarray | list | None = None,
+        texts2: np.ndarray | list | None = None,
+        images1: np.ndarray | list | None = None,
+        images2: np.ndarray | list | None = None,
+        labels: np.ndarray | list | None = None,
+        txt_callables: list[Callable] = None,
+        img_callables: list[Callable] = None,
+    ):
+        """
+        Initialize the FlexiblePairDataset for handling pairs of data.
+
+        Args:
+            mode: The type of pair data ("text_pair", "image_pair", "text_image_pair").
+            texts1: First list of texts (for text_pair or text_image_pair modes).
+            texts2: Second list of texts (for text_pair or text_image_pair modes).
+            images1: First list of image paths (for image_pair or text_image_pair modes).
+            images2: Second list of image paths (for image_pair or text_image_pair modes).
+            labels: Labels for the pairs (defaults to indices if None).
+            txt_callables: List of transformations for text data.
+            img_callables: List of transformations for image data.
+        """
+        self.mode = mode
+        self.txt_callables = txt_callables
+        self.img_callables = img_callables
+
+        # Set up data based on mode and validate lengths
+        if mode == "text_pair":
+            assert (
+                texts1 is not None and texts2 is not None
+            ), "Both texts1 and texts2 must be provided for text_pair mode"
+            assert len(texts1) == len(
+                texts2
+            ), "texts1 and texts2 must have the same length"
+            self.texts1 = texts1
+            self.texts2 = texts2
+            self.dataset_size = len(texts1)
+        elif mode == "image_pair":
+            assert (
+                images1 is not None and images2 is not None
+            ), "Both images1 and images2 must be provided for image_pair mode"
+            assert len(images1) == len(
+                images2
+            ), "images1 and images2 must have the same length"
+            self.images1 = images1
+            self.images2 = images2
+            self.dataset_size = len(images1)
+        elif mode == "text_image_pair":
+            assert all(
+                x is not None for x in [texts1, images1, texts2, images2]
+            ), "All text and image lists must be provided for text_image_pair mode"
+            assert (
+                len(texts1) == len(images1) == len(texts2) == len(images2)
+            ), "All lists must have the same length"
+            self.texts1 = texts1
+            self.images1 = images1
+            self.texts2 = texts2
+            self.images2 = images2
+            self.dataset_size = len(texts1)
+        else:
+            raise ValueError(
+                f"Invalid mode: {mode}. Must be 'text_pair', 'image_pair', or 'text_image_pair'"
+            )
+
+        # Set labels (default to indices if not provided)
+        self.labels = np.arange(self.dataset_size) if labels is None else labels
+        assert (
+            len(self.labels) == self.dataset_size
+        ), "Labels length must match dataset size"
+
+        # Initialize shuffling indices
+        self._original_indices = np.arange(self.dataset_size)
+        self._shuffled_indices = self._original_indices.copy()
+
+    def get_text_from_list(self, text_list, idx):
+        """
+        Retrieve and transform text from a specified list at the given index.
+
+        Args:
+            text_list: List of texts to process.
+            idx: Index of the text to retrieve.
+
+        Returns:
+            Transformed text.
+        """
+        text = text_list[idx]
+        if self.txt_callables is not None:
+            for callable in self.txt_callables:
+                text = callable(text)
+        return text
+
+    def get_image_from_list(self, image_list, idx):
+        """
+        Retrieve and transform an image from a specified list at the given index.
+
+        Args:
+            image_list: List of image paths to process.
+            idx: Index of the image to retrieve.
+
+        Returns:
+            Transformed image.
+        """
+        image_path = image_list[idx]
+        image = Image.open(image_path).convert("RGB")
+        if self.img_callables is not None:
+            for callable in self.img_callables:
+                if isinstance(callable, Compose):
+                    image = callable(image)
+                elif isinstance(callable, A.Compose):
+                    image_np = np.array(image)
+                    augmented = callable(image=image_np)
+                    image = augmented["image"]
+                else:
+                    image = callable(image)
+        return image
+
+    def __getitem__(self, index: int) -> tuple:
+        """
+        Retrieve a pair of items and their label at the specified index.
+
+        Args:
+            index: Index of the pair to retrieve.
+
+        Returns:
+            Tuple containing the pair of data and the label.
+            - For text_pair: ((text1, text2), label)
+            - For image_pair: ((image1, image2), label)
+            - For text_image_pair: (((text1, image1), (text2, image2)), label)
+        """
+        idx = self._shuffled_indices[index]
+        lab = self.labels[idx]
+
+        if self.mode == "text_pair":
+            text1 = self.get_text_from_list(self.texts1, idx)
+            text2 = self.get_text_from_list(self.texts2, idx)
+            return (text1, text2), lab
+        elif self.mode == "image_pair":
+            image1 = self.get_image_from_list(self.images1, idx)
+            image2 = self.get_image_from_list(self.images2, idx)
+            return (image1, image2), lab
+        elif self.mode == "text_image_pair":
+            text1 = self.get_text_from_list(self.texts1, idx)
+            image1 = self.get_image_from_list(self.images1, idx)
+            text2 = self.get_text_from_list(self.texts2, idx)
+            image2 = self.get_image_from_list(self.images2, idx)
+            return ((text1, image1), (text2, image2)), lab
+
+    def __len__(self) -> int:
+        """Return the size of the dataset."""
+        return self.dataset_size
+
+
 class ClusterSampler(Sampler):
     """Sample from clusters ensuring each batch contains samples from different clusters."""
 
