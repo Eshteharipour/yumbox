@@ -444,6 +444,7 @@ def plot_metric_across_runs(
 
     # Clean up
     plt.close(fig)
+    cleanup_plots()
 
 
 def process_experiment_metrics(
@@ -621,3 +622,27 @@ def visualize_metrics(
     fig.update_traces(marker=dict(size=12))
     fig.update_layout(showlegend=True)
     fig.show()
+
+
+def cleanup_plots():
+    """Clean up all matplotlib figures safely during training"""
+    import gc
+
+    import matplotlib.pyplot as plt
+
+    plt.clf()
+    plt.cla()
+
+    # Alternative: remove from figure manager
+    from matplotlib._pylab_helpers import Gcf
+
+    Gcf.destroy_all()
+
+    # Get all figure numbers and delete them
+    # fig_nums = plt.get_fignums()
+    # for num in fig_nums:
+    #     fig = plt.figure(num)
+    #     fig.clear()
+    #     del fig
+
+    gc.collect()
