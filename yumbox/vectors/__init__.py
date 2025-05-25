@@ -309,9 +309,42 @@ def partial_feats(keys: Iterable[str], feats: dict[str]) -> dict[str]:
 
 
 def reconstruct_original_index(
-    target: np.ndarray | list, missing_indices: np.ndarray | list, fill_value=None
+    target: np.ndarray | list,
+    missing_indices: np.ndarray | list,
+    fill_value: np.ndarray | list | None = None,
 ):
+    """Reconstruct original array by inserting fill values at missing indices.
+
+    Args:
+        target: The array/list to insert values into.
+        missing_indices: Indices where values should be inserted.
+        fill_value: Single value, array of values, or None.
+
+    Returns:
+        np.ndarray | list: Target with fill values inserted at specified indices.
+
+    Examples:
+        >>> reconstruct_original_index([0, 1, 3, 6], [2, 4, 5, 7], [2, 4, 5, 7])
+        [0, 1, 2, 3, 4, 5, 6, 7]
+
+        >>> reconstruct_original_index([0, 1, 3, 6], [2, 4, 5, 7])
+        [0, 1, None, 3, None, None, 6, None]
+
+    """
+    if not (
+        hasattr(fill_value, "__len__") and not isinstance(fill_value, str)
+    ) and not hasattr(fill_value, "__iter__"):
+        fill_value = len(missing_indices) * [fill_value]
+
+    assert len(missing_indices) == len(fill_value), (
+        f"Length of missing indices {len(missing_indices)} "
+        f"and fill value {len(fill_value    )} is not equal."
+    )
+
+    is_ndarray = isinstance(target, np.ndarray)
+
     target = list(target)
-    for index in missing_indices:
-        target.insert(index, fill_value)
-    return np.array(target, dtype=object)
+    for index, value in zip(missing_indices, fill_value):
+        target.insert(index, value)
+
+    return np.array(target, dtype=object) if is_ndarray else target
