@@ -342,9 +342,10 @@ def reconstruct_original_index(
     )
 
     is_ndarray = isinstance(target, np.ndarray)
+    dtype = target.dtype if is_ndarray else None
 
     target = list(target)
     for index, value in zip(missing_indices, fill_value):
         target.insert(index, value)
 
-    return np.array(target, dtype=object) if is_ndarray else target
+    return np.array(target, dtype=dtype) if is_ndarray else target
