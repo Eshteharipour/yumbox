@@ -7,6 +7,8 @@ import requests
 from PIL import Image
 from torch.utils.data import Dataset
 
+from yumbox.config import BFG
+
 from .trainer import *
 
 no_op = lambda x: x
@@ -45,7 +47,8 @@ class WebImgDataset(Dataset):
             img = self.transform(img)
             return key, img
         except Exception as e:
-            return key, np.zeros(self.embed_dim)
+            print(f"WARNING: download/read failed with exception: {e}")
+            return key, torch.empty(0, self.embed_dim, dtype=torch.float32)
 
 
 class ImgDataset(Dataset):
@@ -69,7 +72,16 @@ class ImgDataset(Dataset):
 
     def __getitem__(self, index):
         key, path = self.data[index]
-        img = Image.open(path).convert("RGB")
+        try:
+            img = Image.open(path).convert("RGB")
+        except OSError as e:
+            BFG["logger"].error(f"Error reading corrupted image: {path}")
+            BFG["logger"].error(e)
+            raise
+        except Exception as e:
+            BFG["logger"].error(f"Error while reading image: {path}")
+            BFG["logger"].error(e)
+            raise
         img = self.transform(img)
         return key, img
 
