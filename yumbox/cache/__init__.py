@@ -87,6 +87,52 @@ def timed_cache(max_age_hours=1):
     return decorator
 
 
+def timed_cache_kwargs(max_age_hours=1):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            cache_dir = BFG["cache_dir"]
+            logger = BFG["logger"]
+
+            func_name = func.__name__
+            func_kwargs = []
+            for k, v in sorted(kwargs.items()):
+                func_kwargs.append(f"{k}-{v}")
+            func_kwargs = ",".join(func_kwargs)
+            cache_file = (
+                os.path.join(cache_dir, f"{func_name}_{func_kwargs}.pkl")
+                if cache_dir and func_kwargs
+                else os.path.join(cache_dir, f"{func_name}.pkl") if cache_dir else ""
+            )
+
+            # Check if cache file exists and is recent enough
+            if cache_dir and os.path.isfile(cache_file):
+                # Get file's last modified time
+                file_mtime = os.path.getmtime(cache_file)
+                current_time = time.time()
+                # Convert max_age_hours to seconds
+                max_age_seconds = max_age_hours * 3600
+
+                # Check if file was modified within max_age_hours
+                if (current_time - file_mtime) <= max_age_seconds:
+                    logger.info(f"Loading cache for {func_name} from {cache_dir}")
+                    result = safe_rpickle(cache_file)
+                    logger.info(f"Loaded cache for {func_name} from {cache_dir}")
+                    return result
+
+            # Either no cache file or cache is too old
+            result = func(*args, **kwargs)
+            if cache_dir:
+                logger.info(f"Saving cache for {func_name} to {cache_dir}")
+                safe_wpickle(cache_file, result)
+                logger.info(f"Saved cache!")
+            return result
+
+        return wrapper
+
+    return decorator
+
+
 def cache_kwargs(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -95,13 +141,13 @@ def cache_kwargs(func):
 
         func_name = func.__name__
         func_kwargs = []
-        for k, v in kwargs.items():
+        for k, v in sorted(kwargs.items()):
             func_kwargs.append(f"{k}-{v}")
         func_kwargs = ",".join(func_kwargs)
         cache_file = (
             os.path.join(cache_dir, f"{func_name}_{func_kwargs}.pkl")
-            if cache_dir
-            else ""
+            if cache_dir and func_kwargs
+            else os.path.join(cache_dir, f"{func_name}.pkl") if cache_dir else ""
         )
 
         if cache_dir and os.path.isfile(cache_file):
@@ -295,13 +341,13 @@ def np_cache_kwargs(func):
 
         func_name = func.__name__
         func_kwargs = []
-        for k, v in kwargs.items():
+        for k, v in sorted(kwargs.items()):
             func_kwargs.append(f"{k}-{v}")
         func_kwargs = ",".join(func_kwargs)
         cache_file = (
             os.path.join(cache_dir, f"{func_name}_{func_kwargs}.npz")
-            if cache_dir
-            else ""
+            if cache_dir and func_kwargs
+            else os.path.join(cache_dir, f"{func_name}.npz") if cache_dir else ""
         )
 
         if cache_dir and os.path.isfile(cache_file):
@@ -634,7 +680,7 @@ def last_offset(func):
         logger = BFG["logger"]
 
         func_kwargs = []
-        for k, v in kwargs.items():
+        for k, v in sorted(kwargs.items()):
             if k.endswith("_cached"):
                 func_kwargs.append(f"{k}-{v}")
         func_kwargs = ",".join(func_kwargs)
@@ -728,7 +774,7 @@ def last_str_offset(func):
         logger = BFG["logger"]
 
         func_kwargs = []
-        for k, v in kwargs.items():
+        for k, v in sorted(kwargs.items()):
             if k.endswith("_cached"):
                 func_kwargs.append(f"{k}-{v}")
         func_kwargs = ",".join(func_kwargs)
