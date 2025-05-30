@@ -233,14 +233,22 @@ def run_all_configs(
         os.environ["TQDM_DISABLE"] = tqdm_default
 
 
-def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Run]:
-    """Find the most recent successful run to continue training from.
+def get_mlflow_runs(
+    experiment_name: str,
+    status: Literal["success", "failed"] | None = "success",
+    level: Literal["parent", "child"] | None = "parent",
+) -> list[mlflow.entities.Run]:
+    """Get runs based on experiment name, status, and hierarchy level.
 
     Args:
         experiment_name (str): Name of the MLflow experiment
+        status (str): Run status - "success" for FINISHED runs, "failed" for FAILED runs,
+                     None for any status
+        level (str): Run hierarchy level - "parent" for parent runs only, "child" for child runs only,
+                    None for all runs regardless of hierarchy
 
     Returns:
-        Optional[mlflow.entities.Run]: Most recent successful run or None if not found
+        List[mlflow.entities.Run]: List of runs matching the criteria, sorted by start_time DESC
     """
     logger = BFG["logger"]
 
@@ -250,30 +258,61 @@ def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Ru
 
     if not experiment:
         logger.warning(f"Experiment '{experiment_name}' not found")
-        return None
+        return []
 
-    # Filter for only completed runs
+    # Build filter string based on status
+    filter_conditions = []
+    if status and status.lower() == "success":
+        filter_conditions.append("status = 'FINISHED'")
+    elif status and status.lower() == "failed":
+        filter_conditions.append("status = 'FAILED'")
+
+    filter_string = " AND ".join(filter_conditions) if filter_conditions else ""
+
+    # Search runs with status filter
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
-        filter_string="status = 'FINISHED'",
+        filter_string=filter_string,
         run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
         order_by=["start_time DESC"],  # new to old
     )
-    runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
+
+    # Apply hierarchy level filtering
+    if level and level.lower() == "parent":
+        # Filter for parent runs only (no parentRunId tag)
+        runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
+    elif level and level.lower() == "child":
+        # Filter for child runs only (has parentRunId tag)
+        runs = [run for run in runs if "mlflow.parentRunId" in run.data.tags]
 
     if not runs:
-        logger.info(f"No successful runs found for experiment '{experiment_name}'")
-        return None
+        logger.info(
+            f"No runs found for experiment '{experiment_name}' with status='{status}' and level='{level}'"
+        )
+        return []
 
     logger.info(
-        f"Found successful run {runs[0].info.run_id} for experiment '{experiment_name}'"
+        f"Found {len(runs)} run(s) for experiment '{experiment_name}' with status='{status}' and level='{level}'"
     )
-    return runs[0]
+    return runs
+
     # except Exception as e:
-    #     logger.error(
-    #         f"Error retrieving last successful run for '{experiment_name}': {str(e)}"
-    #     )
-    #     return None
+    #     logger.error(f"Error retrieving runs for '{experiment_name}': {str(e)}")
+    #     return []
+
+
+# Helper functions for backward compatibility and convenience
+def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Run]:
+    """Find the most recent successful parent run."""
+    logger = BFG["logger"]
+    runs = get_mlflow_runs(experiment_name, status="success", level="parent")
+    if runs:
+        logger.info(
+            f"Found successful run {runs[0].info.run_id} for experiment '{experiment_name}'"
+        )
+        return runs[0]
+    else:
+        logger.warning(f"No successful runs found for experiment '{experiment_name}'")
 
 
 def get_last_run_failed(experiment_name: str) -> Optional[mlflow.entities.Run]:
