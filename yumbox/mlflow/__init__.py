@@ -696,6 +696,8 @@ def plot_metric_across_experiments(
     title: str = None,
     figsize: tuple = (10, 6),
     dpi: int = 300,
+    subsample_interval: int = 100,  # NEW: configurable subsampling interval
+    marker_size: int = 6,  # NEW: configurable marker size
 ) -> None:
     """
     Plots the specified metric across multiple MLflow experiments with print-friendly styling.
@@ -711,6 +713,8 @@ def plot_metric_across_experiments(
     - title (str, optional): Custom title for the plot
     - figsize (tuple): Figure size in inches (width, height)
     - dpi (int): DPI for high-quality output suitable for printing
+    - subsample_interval (int): Subsample 1 point every N steps to reduce density (default: 100)
+    - marker_size (int): Size of markers on the plot (default: 6)
 
     Notes:
     - The function must be called within an active MLflow run to log the figure
@@ -718,6 +722,7 @@ def plot_metric_across_experiments(
     - Uses print-friendly line styles (different patterns, markers) for B&W printing
     - Orders runs from oldest to newest within each experiment
     - If legend_names is provided, it must have the same length as experiment_names
+    - Subsamples data points to reduce visual density while maintaining trend visibility
     """
     from itertools import cycle
 
@@ -787,7 +792,7 @@ def plot_metric_across_experiments(
 
         runs_plotted = 0
 
-        for i, run in enumerate(runs):
+        for run_idx, run in enumerate(runs):
             try:
                 # Get metric history
                 metrics = client.get_metric_history(run.info.run_id, metric_key)
@@ -811,21 +816,43 @@ def plot_metric_across_experiments(
 
                 y_values = [m.value for m in metrics]
 
-                # Plot with print-friendly styling
-                line = ax.plot(
+                # NEW: Subsample data points to reduce density
+                if len(x_values) > subsample_interval:
+                    # Keep first and last points, then subsample in between
+                    indices = [0]  # Always keep first point
+
+                    # Add subsampled points
+                    for idx in range(
+                        subsample_interval, len(x_values) - 1, subsample_interval
+                    ):
+                        indices.append(idx)
+
+                    # Always keep last point
+                    if len(x_values) - 1 not in indices:
+                        indices.append(len(x_values) - 1)
+
+                    x_values = [x_values[idx] for idx in indices]
+                    y_values = [y_values[idx] for idx in indices]
+
+                    logger.info(
+                        f"Subsampled {len(metrics)} points to {len(x_values)} points for run {run.info.run_id}"
+                    )
+
+                # Plot with improved styling - markers connected with lines
+                ax.plot(
                     x_values,
                     y_values,
                     linestyle=current_style,
                     marker=current_marker,
                     color=current_color,
-                    markersize=4,
-                    markevery=max(
-                        1, len(x_values) // 20
-                    ),  # Show markers but not too dense
+                    markersize=marker_size,  # NEW: configurable marker size
                     linewidth=1.5,
                     alpha=0.8,
-                    label=f"{legend_name} (Run {i+1})",
-                )[0]
+                    label=f"{legend_name} (Run {run_idx+1})",
+                    markerfacecolor="white",  # NEW: hollow markers for better visibility
+                    markeredgecolor=current_color,
+                    markeredgewidth=1.5,
+                )
 
                 runs_plotted += 1
 
@@ -845,7 +872,10 @@ def plot_metric_across_experiments(
                     color=current_color,
                     linestyle=current_style,
                     marker=current_marker,
-                    markersize=6,
+                    markersize=marker_size,
+                    markerfacecolor="white",
+                    markeredgecolor=current_color,
+                    markeredgewidth=1.5,
                     label=f"{legend_name} ({runs_plotted} runs)",
                 )
             )
@@ -888,11 +918,239 @@ def plot_metric_across_experiments(
 
     # Set artifact filename
     if artifact_file is not None:
-        plt.savefig(artifact_file, dpi=dpi)
+        plt.savefig(artifact_file, dpi=dpi, bbox_inches="tight")
         logger.info(f"Plot saved as artifact: {artifact_file}")
     else:
         plt.show()
 
     # Clean up
+    plt.close(fig)
+    cleanup_plots()
+
+
+def plot_metric_across_experiments_advanced(
+    experiment_names: list[str],
+    metric_key: str,
+    mode: Literal["step", "epoch"] = "step",
+    legend_names: list[str] = None,
+    artifact_file: str = None,
+    title: str = None,
+    figsize: tuple = (10, 6),
+    dpi: int = 300,
+    subsample_interval: int = 100,
+    marker_size: int = 6,
+    max_points: int = None,  # NEW: maximum number of points to show
+    subsample_method: Literal[
+        "uniform", "adaptive"
+    ] = "uniform",  # NEW: subsampling method
+) -> None:
+    """
+    Advanced version with additional subsampling controls.
+
+    Additional Parameters:
+    - max_points (int, optional): Maximum number of points to display per run.
+                                If None, uses subsample_interval method.
+    - subsample_method (str): "uniform" for regular intervals, "adaptive" for more
+                             points at the beginning and end of training.
+    """
+    from itertools import cycle
+
+    import matplotlib.lines as mlines
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    logger = BFG["logger"]
+    client = MlflowClient()
+
+    # Validate legend_names if provided
+    if legend_names is not None:
+        if len(legend_names) != len(experiment_names):
+            raise ValueError(
+                f"legend_names length ({len(legend_names)}) must match experiment_names length ({len(experiment_names)})"
+            )
+    else:
+        legend_names = experiment_names
+
+    # Print-friendly line styles: different patterns and markers
+    line_styles = ["-", "--", "-.", ":"]
+    markers = ["o", "s", "^", "D", "v", "<", ">", "p", "*", "h"]
+    colors = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
+
+    # Create cycling iterators for styles
+    style_cycle = cycle(line_styles)
+    marker_cycle = cycle(markers)
+    color_cycle = cycle(colors)
+
+    # Create plot with high DPI for print quality
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+    legend_elements = []
+    experiments_found = 0
+
+    def subsample_data(x_vals, y_vals, method="uniform"):
+        """Subsample data based on specified method."""
+        if len(x_vals) <= 2:
+            return x_vals, y_vals
+
+        if max_points and len(x_vals) > max_points:
+            if method == "adaptive":
+                # More points at beginning and end
+                n_start = max_points // 4
+                n_end = max_points // 4
+                n_middle = max_points - n_start - n_end
+
+                start_indices = list(range(min(n_start, len(x_vals) // 4)))
+                end_indices = list(
+                    range(max(len(x_vals) - n_end, len(x_vals) // 2), len(x_vals))
+                )
+
+                if n_middle > 0:
+                    middle_start = len(x_vals) // 4
+                    middle_end = len(x_vals) - len(x_vals) // 4
+                    middle_indices = np.linspace(
+                        middle_start, middle_end, n_middle, dtype=int
+                    )
+                    indices = sorted(
+                        set(start_indices + list(middle_indices) + end_indices)
+                    )
+                else:
+                    indices = sorted(set(start_indices + end_indices))
+            else:  # uniform
+                indices = np.linspace(0, len(x_vals) - 1, max_points, dtype=int)
+        else:
+            # Use subsample_interval method
+            indices = [0]  # Always keep first point
+            for idx in range(subsample_interval, len(x_vals) - 1, subsample_interval):
+                indices.append(idx)
+            if len(x_vals) - 1 not in indices:
+                indices.append(len(x_vals) - 1)
+
+        return [x_vals[i] for i in indices], [y_vals[i] for i in indices]
+
+    for i, exp_name in enumerate(experiment_names):
+        legend_name = legend_names[i]
+        experiment = client.get_experiment_by_name(exp_name)
+        if not experiment:
+            logger.warning(f"Experiment '{exp_name}' not found")
+            continue
+
+        runs = get_mlflow_runs(exp_name, status="success", level="parent")
+        if not runs:
+            logger.warning(f"No successful runs found for experiment '{exp_name}'")
+            continue
+
+        runs = runs[::-1]  # Oldest to newest
+
+        current_style = next(style_cycle)
+        current_marker = next(marker_cycle)
+        current_color = next(color_cycle)
+
+        runs_plotted = 0
+
+        for run_idx, run in enumerate(runs):
+            try:
+                metrics = client.get_metric_history(run.info.run_id, metric_key)
+                if not metrics:
+                    continue
+
+                metrics = sorted(metrics, key=lambda m: m.step)
+
+                if mode.lower() == "epoch":
+                    x_values = [m.step for m in metrics]
+                    x_label = "Epoch"
+                else:
+                    x_values = [m.step for m in metrics]
+                    x_label = "Step"
+
+                y_values = [m.value for m in metrics]
+
+                # Apply subsampling
+                if len(x_values) > 2:
+                    x_values, y_values = subsample_data(
+                        x_values, y_values, subsample_method
+                    )
+                    logger.info(
+                        f"Subsampled to {len(x_values)} points for run {run.info.run_id}"
+                    )
+
+                # Plot with connected markers
+                ax.plot(
+                    x_values,
+                    y_values,
+                    linestyle=current_style,
+                    marker=current_marker,
+                    color=current_color,
+                    markersize=marker_size,
+                    linewidth=1.5,
+                    alpha=0.8,
+                    label=f"{legend_name} (Run {run_idx+1})",
+                    markerfacecolor="white",
+                    markeredgecolor=current_color,
+                    markeredgewidth=1.5,
+                )
+
+                runs_plotted += 1
+
+            except Exception as e:
+                logger.warning(f"Error processing run {run.info.run_id}: {e}")
+                continue
+
+        if runs_plotted > 0:
+            experiments_found += 1
+            legend_elements.append(
+                mlines.Line2D(
+                    [],
+                    [],
+                    color=current_color,
+                    linestyle=current_style,
+                    marker=current_marker,
+                    markersize=marker_size,
+                    markerfacecolor="white",
+                    markeredgecolor=current_color,
+                    markeredgewidth=1.5,
+                    label=f"{legend_name} ({runs_plotted} runs)",
+                )
+            )
+
+    if experiments_found == 0:
+        logger.warning("No data found for any experiments")
+        plt.close(fig)
+        return
+
+    ax.set_xlabel(x_label, fontsize=12, fontweight="bold")
+    ax.set_ylabel(metric_key.replace("_", " ").title(), fontsize=12, fontweight="bold")
+
+    if title:
+        ax.set_title(title, fontsize=14, fontweight="bold", pad=20)
+
+    ax.legend(
+        handles=legend_elements,
+        loc="best",
+        frameon=True,
+        fancybox=True,
+        shadow=True,
+        fontsize=10,
+        framealpha=0.9,
+    )
+    ax.grid(True, alpha=0.3, linestyle="-", linewidth=0.5)
+    plt.tight_layout()
+
+    if artifact_file is not None:
+        plt.savefig(artifact_file, dpi=dpi, bbox_inches="tight")
+        logger.info(f"Plot saved as: {artifact_file}")
+    else:
+        plt.show()
+
     plt.close(fig)
     cleanup_plots()
