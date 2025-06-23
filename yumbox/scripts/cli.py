@@ -4,7 +4,12 @@ import argparse
 
 import pandas as pd
 
-from yumbox.mlflow import process_experiment_metrics, visualize_metrics
+from yumbox.mlflow import (
+    plot_metric_across_experiments,
+    process_experiment_metrics,
+    set_tracking_uri,
+    visualize_metrics,
+)
 
 
 def analyze_metrics(args):
@@ -59,6 +64,27 @@ def analyze_metrics(args):
         title=args.title,
         theme=args.theme,
     )
+
+
+def compare_experiments(args):
+    """Compare metric across multiple experiments with print-friendly visualization."""
+    set_tracking_uri(args.storage_path)
+
+    plot_metric_across_experiments(
+        experiment_names=args.experiment_names,
+        metric_key=args.metric,
+        mode=args.mode,
+        legend_names=args.legend_names,
+        artifact_file=args.output_file,
+        title=args.title,
+        figsize=tuple(args.figsize) if args.figsize else (10, 6),
+        dpi=args.dpi,
+    )
+
+    print(f"Experiment comparison plot generated for metric '{args.metric}'")
+    print(f"Experiments compared: {', '.join(args.experiment_names)}")
+    if args.legend_names:
+        print(f"Legend names: {', '.join(args.legend_names)}")
 
 
 def main():
@@ -157,10 +183,73 @@ def main():
         help="Plotly theme for the visualization (e.g., 'plotly', 'plotly_dark', 'plotly_white'). Default: 'plotly_dark'.",
     )
 
+    # Subparser for compare-experiments
+    compare_parser = subparsers.add_parser(
+        "compare-experiments",
+        help="Compare a single metric across multiple experiments with print-friendly visualization",
+    )
+    compare_parser.add_argument(
+        "--storage-path",
+        type=str,
+        required=True,
+        help="Path to the MLflow storage folder containing experiment data (e.g., './mlflow').",
+    )
+    compare_parser.add_argument(
+        "--experiment-names",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Space-separated list of experiment names to compare (e.g., 'exp1' 'exp2' 'exp3').",
+    )
+    compare_parser.add_argument(
+        "--legend-names",
+        type=str,
+        nargs="+",
+        help="Space-separated list of custom names for legend in same order as experiment-names (e.g., 'Baseline' 'Method A' 'Method B'). Optional.",
+    )
+    compare_parser.add_argument(
+        "--metric",
+        type=str,
+        required=True,
+        help="Single metric name to plot across experiments (e.g., 'train_loss', 'val_accuracy').",
+    )
+    compare_parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["step", "epoch"],
+        default="step",
+        help="X-axis mode: 'step' for training steps or 'epoch' for epochs. Default: 'step'.",
+    )
+    compare_parser.add_argument(
+        "--output-file",
+        type=str,
+        help="Custom filename for the output plot artifact (e.g., 'my_comparison.png'). Optional.",
+    )
+    compare_parser.add_argument(
+        "--title",
+        type=str,
+        help="Custom title for the plot. If not provided, will auto-generate based on metric name.",
+    )
+    compare_parser.add_argument(
+        "--figsize",
+        type=float,
+        nargs=2,
+        metavar=("WIDTH", "HEIGHT"),
+        help="Figure size in inches as two values: width height (e.g., 12 8). Default: 10 6.",
+    )
+    compare_parser.add_argument(
+        "--dpi",
+        type=int,
+        default=300,
+        help="DPI for high-quality output suitable for printing. Default: 300.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "analyze":
         analyze_metrics(args)
+    elif args.command == "compare-experiments":
+        compare_experiments(args)
     else:
         parser.print_help()
 

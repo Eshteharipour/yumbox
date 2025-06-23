@@ -685,3 +685,214 @@ def cleanup_plots():
     #     del fig
 
     gc.collect()
+
+
+def plot_metric_across_experiments(
+    experiment_names: list[str],
+    metric_key: str,
+    mode: Literal["step", "epoch"] = "step",
+    legend_names: list[str] = None,
+    artifact_file: str = None,
+    title: str = None,
+    figsize: tuple = (10, 6),
+    dpi: int = 300,
+) -> None:
+    """
+    Plots the specified metric across multiple MLflow experiments with print-friendly styling.
+
+    Parameters:
+    - experiment_names (list[str]): List of experiment names to compare
+    - metric_key (str): The key of the metric to plot (e.g., 'train_loss', 'val_accuracy')
+    - mode (str): X-axis mode - "step" or "epoch" (default: "step")
+    - legend_names (list[str], optional): Custom names for legend in same order as experiment_names.
+                                        If None, uses experiment_names directly.
+    - artifact_file (str, optional): The file name to save the plot.
+                                   Defaults to "{metric_key}_across_experiments.png"
+    - title (str, optional): Custom title for the plot
+    - figsize (tuple): Figure size in inches (width, height)
+    - dpi (int): DPI for high-quality output suitable for printing
+
+    Notes:
+    - The function must be called within an active MLflow run to log the figure
+    - Only runs with status 'FINISHED' are included
+    - Uses print-friendly line styles (different patterns, markers) for B&W printing
+    - Orders runs from oldest to newest within each experiment
+    - If legend_names is provided, it must have the same length as experiment_names
+    """
+    from itertools import cycle
+
+    import matplotlib.lines as mlines
+    import matplotlib.pyplot as plt
+
+    logger = BFG["logger"]
+    client = MlflowClient()
+
+    # Validate legend_names if provided
+    if legend_names is not None:
+        if len(legend_names) != len(experiment_names):
+            raise ValueError(
+                f"legend_names length ({len(legend_names)}) must match experiment_names length ({len(experiment_names)})"
+            )
+    else:
+        legend_names = experiment_names
+
+    # Print-friendly line styles: different patterns and markers
+    line_styles = ["-", "--", "-.", ":"]
+    markers = ["o", "s", "^", "D", "v", "<", ">", "p", "*", "h"]
+    colors = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
+
+    # Create cycling iterators for styles
+    style_cycle = cycle(line_styles)
+    marker_cycle = cycle(markers)
+    color_cycle = cycle(colors)
+
+    # Create plot with high DPI for print quality
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+    legend_elements = []
+    experiments_found = 0
+
+    for i, exp_name in enumerate(experiment_names):
+        legend_name = legend_names[i]  # Get corresponding legend name
+        # Get experiment by name
+        experiment = client.get_experiment_by_name(exp_name)
+        if not experiment:
+            logger.warning(f"Experiment '{exp_name}' not found")
+            continue
+
+        # Get all successful runs, ordered from oldest to newest
+        runs = get_mlflow_runs(exp_name, status="success", level="parent")
+        if not runs:
+            logger.warning(f"No successful runs found for experiment '{exp_name}'")
+            continue
+
+        # Reverse to get oldest to newest (get_mlflow_runs returns newest first)
+        runs = runs[::-1]
+
+        # Get current style elements
+        current_style = next(style_cycle)
+        current_marker = next(marker_cycle)
+        current_color = next(color_cycle)
+
+        runs_plotted = 0
+
+        for i, run in enumerate(runs):
+            try:
+                # Get metric history
+                metrics = client.get_metric_history(run.info.run_id, metric_key)
+                if not metrics:
+                    logger.warning(
+                        f"No metric '{metric_key}' found for run {run.info.run_id}"
+                    )
+                    continue
+
+                # Sort metrics by step/timestamp to ensure correct order
+                metrics = sorted(metrics, key=lambda m: m.step)
+
+                # Extract x and y values based on mode
+                if mode.lower() == "epoch":
+                    # Assume step represents epoch in this case
+                    x_values = [m.step for m in metrics]
+                    x_label = "Epoch"
+                else:  # step mode
+                    x_values = [m.step for m in metrics]
+                    x_label = "Step"
+
+                y_values = [m.value for m in metrics]
+
+                # Plot with print-friendly styling
+                line = ax.plot(
+                    x_values,
+                    y_values,
+                    linestyle=current_style,
+                    marker=current_marker,
+                    color=current_color,
+                    markersize=4,
+                    markevery=max(
+                        1, len(x_values) // 20
+                    ),  # Show markers but not too dense
+                    linewidth=1.5,
+                    alpha=0.8,
+                    label=f"{legend_name} (Run {i+1})",
+                )[0]
+
+                runs_plotted += 1
+
+            except Exception as e:
+                logger.warning(
+                    f"Error processing run {run.info.run_id} from experiment '{exp_name}': {e}"
+                )
+                continue
+
+        if runs_plotted > 0:
+            experiments_found += 1
+            # Add experiment to legend (using the last run's style as representative)
+            legend_elements.append(
+                mlines.Line2D(
+                    [],
+                    [],
+                    color=current_color,
+                    linestyle=current_style,
+                    marker=current_marker,
+                    markersize=6,
+                    label=f"{legend_name} ({runs_plotted} runs)",
+                )
+            )
+
+    if experiments_found == 0:
+        logger.warning("No data found for any of the specified experiments")
+        plt.close(fig)
+        return
+
+    # Configure plot for print quality
+    ax.set_xlabel(x_label, fontsize=12, fontweight="bold")
+    ax.set_ylabel(metric_key.replace("_", " ").title(), fontsize=12, fontweight="bold")
+
+    if title:
+        ax.set_title(title, fontsize=14, fontweight="bold", pad=20)
+    # else:
+    #     ax.set_title(
+    #         f'{metric_key.replace("_", " ").title()} Across Experiments',
+    #         fontsize=14,
+    #         fontweight="bold",
+    #         pad=20,
+    #     )
+
+    # Enhanced legend for print clarity
+    ax.legend(
+        handles=legend_elements,
+        loc="best",
+        frameon=True,
+        fancybox=True,
+        shadow=True,
+        fontsize=10,
+        framealpha=0.9,
+    )
+
+    # Grid for better readability in print
+    ax.grid(True, alpha=0.3, linestyle="-", linewidth=0.5)
+
+    # Improve layout
+    plt.tight_layout()
+
+    # Set artifact filename
+    if artifact_file is not None:
+        plt.savefig(artifact_file, dpi=dpi)
+        logger.info(f"Plot saved as artifact: {artifact_file}")
+    else:
+        plt.show()
+
+    # Clean up
+    plt.close(fig)
+    cleanup_plots()
