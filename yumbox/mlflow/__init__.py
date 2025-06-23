@@ -792,78 +792,161 @@ def plot_metric_across_experiments(
 
         runs_plotted = 0
 
-        for run_idx, run in enumerate(runs):
-            try:
-                # Get metric history
-                metrics = client.get_metric_history(run.info.run_id, metric_key)
-                if not metrics:
+        if mode.lower() == "epoch":
+            # For epoch mode, collect all points from all runs and plot together
+            all_x_values = []
+            all_y_values = []
+
+            for run_idx, run in enumerate(runs):
+                try:
+                    # Get metric history
+                    metrics = client.get_metric_history(run.info.run_id, metric_key)
+                    if not metrics:
+                        logger.warning(
+                            f"No metric '{metric_key}' found for run {run.info.run_id}"
+                        )
+                        continue
+
+                    # Sort metrics by step/timestamp to ensure correct order
+                    metrics = sorted(metrics, key=lambda m: m.step)
+
+                    # Extract x and y values
+                    x_values = [m.step for m in metrics]
+                    y_values = [m.value for m in metrics]
+
+                    # NEW: Subsample data points to reduce density
+                    if len(x_values) > subsample_interval:
+                        # Keep first and last points, then subsample in between
+                        indices = [0]  # Always keep first point
+
+                        # Add subsampled points
+                        for idx in range(
+                            subsample_interval, len(x_values) - 1, subsample_interval
+                        ):
+                            indices.append(idx)
+
+                        # Always keep last point
+                        if len(x_values) - 1 not in indices:
+                            indices.append(len(x_values) - 1)
+
+                        x_values = [x_values[idx] for idx in indices]
+                        y_values = [y_values[idx] for idx in indices]
+
+                        logger.info(
+                            f"Subsampled {len(metrics)} points to {len(x_values)} points for run {run.info.run_id}"
+                        )
+
+                    # Collect all points
+                    all_x_values.extend(x_values)
+                    all_y_values.extend(y_values)
+                    runs_plotted += 1
+
+                except Exception as e:
                     logger.warning(
-                        f"No metric '{metric_key}' found for run {run.info.run_id}"
+                        f"Error processing run {run.info.run_id} from experiment '{exp_name}': {e}"
                     )
                     continue
 
-                # Sort metrics by step/timestamp to ensure correct order
-                metrics = sorted(metrics, key=lambda m: m.step)
+            # Plot all points together for epoch mode
+            if all_x_values and all_y_values:
+                # Sort by x-values to ensure proper line connections
+                combined_data = list(zip(all_x_values, all_y_values))
+                combined_data.sort(key=lambda x: x[0])
+                sorted_x, sorted_y = zip(*combined_data)
 
-                # Extract x and y values based on mode
-                if mode.lower() == "epoch":
-                    x_values = [m.step for m in metrics]
-                    x_label = "Epoch"
-                else:  # step mode
-                    x_values = [m.step for m in metrics]
-                    x_label = "Step"
+                print(
+                    f"Epoch mode combined x_values: {sorted_x[:10]}..."
+                )  # Debug print
 
-                y_values = [m.value for m in metrics]
-
-                # NEW: Subsample data points to reduce density
-                if len(x_values) > subsample_interval:
-                    # Keep first and last points, then subsample in between
-                    indices = [0]  # Always keep first point
-
-                    # Add subsampled points
-                    for idx in range(
-                        subsample_interval, len(x_values) - 1, subsample_interval
-                    ):
-                        indices.append(idx)
-
-                    # Always keep last point
-                    if len(x_values) - 1 not in indices:
-                        indices.append(len(x_values) - 1)
-
-                    x_values = [x_values[idx] for idx in indices]
-                    y_values = [y_values[idx] for idx in indices]
-
-                    logger.info(
-                        f"Subsampled {len(metrics)} points to {len(x_values)} points for run {run.info.run_id}"
-                    )
-
-                # Plot with improved styling - markers connected with lines
                 ax.plot(
-                    x_values,
-                    y_values,
+                    sorted_x,
+                    sorted_y,
                     linestyle=current_style,
                     marker=current_marker,
                     color=current_color,
-                    markersize=marker_size,  # NEW: configurable marker size
+                    markersize=marker_size,
                     linewidth=1.5,
                     alpha=0.8,
-                    label=f"{legend_name} (Run {run_idx+1})",
+                    label=f"{legend_name} ({runs_plotted} runs)",
                     markerfacecolor="white",
                     markeredgecolor=current_color,
                     markeredgewidth=1.5,
                 )
 
-                runs_plotted += 1
+            x_label = "Step"  # Actually showing steps, but representing epochs
 
-            except Exception as e:
-                logger.warning(
-                    f"Error processing run {run.info.run_id} from experiment '{exp_name}': {e}"
-                )
-                continue
+        else:
+            # Step mode - plot each run separately (original behavior)
+            for run_idx, run in enumerate(runs):
+                try:
+                    # Get metric history
+                    metrics = client.get_metric_history(run.info.run_id, metric_key)
+                    if not metrics:
+                        logger.warning(
+                            f"No metric '{metric_key}' found for run {run.info.run_id}"
+                        )
+                        continue
+
+                    # Sort metrics by step/timestamp to ensure correct order
+                    metrics = sorted(metrics, key=lambda m: m.step)
+
+                    # Extract x and y values
+                    x_values = [m.step for m in metrics]
+                    y_values = [m.value for m in metrics]
+
+                    # NEW: Subsample data points to reduce density
+                    if len(x_values) > subsample_interval:
+                        # Keep first and last points, then subsample in between
+                        indices = [0]  # Always keep first point
+
+                        # Add subsampled points
+                        for idx in range(
+                            subsample_interval, len(x_values) - 1, subsample_interval
+                        ):
+                            indices.append(idx)
+
+                        # Always keep last point
+                        if len(x_values) - 1 not in indices:
+                            indices.append(len(x_values) - 1)
+
+                        x_values = [x_values[idx] for idx in indices]
+                        y_values = [y_values[idx] for idx in indices]
+
+                        logger.info(
+                            f"Subsampled {len(metrics)} points to {len(x_values)} points for run {run.info.run_id}"
+                        )
+
+                    print(f"Step mode x_values: {x_values[:10]}...")  # Debug print
+
+                    # Plot each run separately for step mode
+                    ax.plot(
+                        x_values,
+                        y_values,
+                        linestyle=current_style,
+                        marker=current_marker,
+                        color=current_color,
+                        markersize=marker_size,
+                        linewidth=1.5,
+                        alpha=0.8,
+                        label=f"{legend_name} (Run {run_idx+1})",
+                        markerfacecolor="white",
+                        markeredgecolor=current_color,
+                        markeredgewidth=1.5,
+                    )
+
+                    runs_plotted += 1
+
+                except Exception as e:
+                    logger.warning(
+                        f"Error processing run {run.info.run_id} from experiment '{exp_name}': {e}"
+                    )
+                    continue
+
+            x_label = "Step"
 
         if runs_plotted > 0:
             experiments_found += 1
-            # Add experiment to legend (using the last run's style as representative)
+            # Add experiment to legend (using the current style as representative)
             legend_elements.append(
                 mlines.Line2D(
                     [],
