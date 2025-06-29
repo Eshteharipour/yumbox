@@ -42,7 +42,7 @@ def analyze_metrics(args):
             tabulate(
                 df,
                 headers="keys",
-                tablefmt="psql",
+                tablefmt="github",  # psql
                 showindex=False,
                 colalign=("left",),
             )
