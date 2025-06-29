@@ -74,10 +74,11 @@ class ImgDataset(Dataset):
         key, path = self.data[index]
         try:
             img = Image.open(path).convert("RGB")
-        except OSError as e:
-            BFG["logger"].error(f"Error reading corrupted image: {path}")
-            BFG["logger"].error(e)
-            raise
+        # OSError: [Errno 12] Cannot allocate memory
+        # except OSError as e:
+        #     BFG["logger"].error(f"Error reading corrupted image: {path}")
+        #     BFG["logger"].error(e)
+        #     raise
         except Exception as e:
             BFG["logger"].error(f"Error while reading image: {path}")
             BFG["logger"].error(e)
