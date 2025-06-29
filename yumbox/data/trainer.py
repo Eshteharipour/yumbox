@@ -258,6 +258,170 @@ class FlexiblePairDataset(FlexibleDataset):
         return self.dataset_size
 
 
+class FlexibleTripletDataset(FlexibleDataset):
+    def __init__(
+        self,
+        mode: Literal["text_triplet", "image_triplet", "text_image_triplet"],
+        texts1: np.ndarray | list | None = None,
+        texts2: np.ndarray | list | None = None,
+        texts3: np.ndarray | list | None = None,
+        images1: np.ndarray | list | None = None,
+        images2: np.ndarray | list | None = None,
+        images3: np.ndarray | list | None = None,
+        txt_callables: list[Callable] = None,
+        img_callables: list[Callable] = None,
+    ):
+        """
+        Initialize the FlexibleTripletDataset for handling triplets of data.
+
+        Args:
+            mode: The type of triplet data ("text_triplet", "image_triplet", "text_image_triplet").
+            texts1: First list of texts (for text_triplet or text_image_triplet modes).
+            texts2: Second list of texts (for text_triplet or text_image_triplet modes).
+            texts3: Third list of texts (for text_triplet or text_image_triplet modes).
+            images1: First list of image paths (for image_triplet or text_image_triplet modes).
+            images2: Second list of image paths (for image_triplet or text_image_triplet modes).
+            images3: Third list of image paths (for image_triplet or text_image_triplet modes).
+            txt_callables: List of transformations for text data.
+            img_callables: List of transformations for image data.
+        """
+        self.mode = mode
+        self.txt_callables = txt_callables
+        self.img_callables = img_callables
+
+        # Set up data based on mode and validate lengths
+        if mode == "text_triplet":
+            assert all(
+                x is not None for x in [texts1, texts2, texts3]
+            ), "All texts1, texts2, and texts3 must be provided for text_triplet mode"
+            assert (
+                len(texts1) == len(texts2) == len(texts3)
+            ), "texts1, texts2, and texts3 must have the same length"
+            self.texts1 = texts1
+            self.texts2 = texts2
+            self.texts3 = texts3
+            self.dataset_size = len(texts1)
+        elif mode == "image_triplet":
+            assert all(
+                x is not None for x in [images1, images2, images3]
+            ), "All images1, images2, and images3 must be provided for image_triplet mode"
+            assert (
+                len(images1) == len(images2) == len(images3)
+            ), "images1, images2, and images3 must have the same length"
+            self.images1 = images1
+            self.images2 = images2
+            self.images3 = images3
+            self.dataset_size = len(images1)
+        elif mode == "text_image_triplet":
+            assert all(
+                x is not None
+                for x in [texts1, images1, texts2, images2, texts3, images3]
+            ), "All text and image lists must be provided for text_image_triplet mode"
+            assert (
+                len(texts1)
+                == len(images1)
+                == len(texts2)
+                == len(images2)
+                == len(texts3)
+                == len(images3)
+            ), "All lists must have the same length"
+            self.texts1 = texts1
+            self.images1 = images1
+            self.texts2 = texts2
+            self.images2 = images2
+            self.texts3 = texts3
+            self.images3 = images3
+            self.dataset_size = len(texts1)
+        else:
+            raise ValueError(
+                f"Invalid mode: {mode}. Must be 'text_triplet', 'image_triplet', or 'text_image_triplet'"
+            )
+
+        # Initialize shuffling indices
+        self._original_indices = np.arange(self.dataset_size)
+        self._shuffled_indices = self._original_indices.copy()
+
+    def get_text_from_list(self, text_list, idx):
+        """
+        Retrieve and transform text from a specified list at the given index.
+
+        Args:
+            text_list: List of texts to process.
+            idx: Index of the text to retrieve.
+
+        Returns:
+            Transformed text.
+        """
+        text = text_list[idx]
+        if self.txt_callables is not None:
+            for callable in self.txt_callables:
+                text = callable(text)
+        return text
+
+    def get_image_from_list(self, image_list, idx):
+        """
+        Retrieve and transform an image from a specified list at the given index.
+
+        Args:
+            image_list: List of image paths to process.
+            idx: Index of the image to retrieve.
+
+        Returns:
+            Transformed image.
+        """
+        image_path = image_list[idx]
+        image = Image.open(image_path).convert("RGB")
+        if self.img_callables is not None:
+            for callable in self.img_callables:
+                if isinstance(callable, Compose):
+                    image = callable(image)
+                elif isinstance(callable, A.Compose):
+                    image_np = np.array(image)
+                    augmented = callable(image=image_np)
+                    image = augmented["image"]
+                else:
+                    image = callable(image)
+        return image
+
+    def __getitem__(self, index: int) -> tuple:
+        """
+        Retrieve a triplet of items and their label at the specified index.
+
+        Args:
+            index: Index of the triplet to retrieve.
+
+        Returns:
+            Tuple containing the triplet of data and the label.
+            - For text_triplet: ((text1, text2, text3), label)
+            - For image_triplet: ((image1, image2, image3), label)
+            - For text_image_triplet: (((text1, image1), (text2, image2), (text3, image3)), label)
+        """
+        idx = self._shuffled_indices[index]
+
+        if self.mode == "text_triplet":
+            text1 = self.get_text_from_list(self.texts1, idx)
+            text2 = self.get_text_from_list(self.texts2, idx)
+            text3 = self.get_text_from_list(self.texts3, idx)
+            return (text1, text2, text3)
+        elif self.mode == "image_triplet":
+            image1 = self.get_image_from_list(self.images1, idx)
+            image2 = self.get_image_from_list(self.images2, idx)
+            image3 = self.get_image_from_list(self.images3, idx)
+            return (image1, image2, image3)
+        elif self.mode == "text_image_triplet":
+            text1 = self.get_text_from_list(self.texts1, idx)
+            image1 = self.get_image_from_list(self.images1, idx)
+            text2 = self.get_text_from_list(self.texts2, idx)
+            image2 = self.get_image_from_list(self.images2, idx)
+            text3 = self.get_text_from_list(self.texts3, idx)
+            image3 = self.get_image_from_list(self.images3, idx)
+            return ((text1, image1), (text2, image2), (text3, image3))
+
+    def __len__(self) -> int:
+        """Return the size of the dataset."""
+        return self.dataset_size
+
+
 class ClusterSampler(Sampler):
     """Sample from clusters ensuring each batch contains samples from different clusters."""
 
