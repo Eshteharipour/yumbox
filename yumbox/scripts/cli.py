@@ -10,6 +10,11 @@ from yumbox.mlflow import (
     set_tracking_uri,
     visualize_metrics,
 )
+from yumbox.mlflow.checkpoint_helpers import (
+    analyze_checkpoint_status,
+    execute_checkpoint_removal,
+    format_checkpoint_report,
+)
 
 
 def analyze_metrics(args):
@@ -85,6 +90,89 @@ def compare_experiments(args):
     print(f"Experiments compared: {', '.join(args.experiment_names)}")
     if args.legend_names:
         print(f"Legend names: {', '.join(args.legend_names)}")
+
+
+def manage_checkpoints(args):
+    """Analyze and manage checkpoint files based on MLflow experiment data."""
+
+    # Define metric direction mapping
+    # You can expand this dict as needed for your specific metrics
+    metric_direction_map = {
+        "loss": "min",
+        "error": "min",
+        "mse": "min",
+        "rmse": "min",
+        "mae": "min",
+        "accuracy": "max",
+        "acc": "max",
+        "precision": "max",
+        "recall": "max",
+        "f1": "max",
+        "auc": "max",
+        "dice": "max",
+        "iou": "max",
+        "bleu": "max",
+        "rouge": "max",
+    }
+
+    # Add custom metric directions if provided
+    if args.custom_metrics:
+        for metric_spec in args.custom_metrics:
+            if ":" not in metric_spec:
+                print(
+                    f"ERROR: Invalid custom metric format '{metric_spec}'. Use 'metric_name:min' or 'metric_name:max'"
+                )
+                return
+            metric_name, direction = metric_spec.split(":", 1)
+            if direction not in ["min", "max"]:
+                print(
+                    f"ERROR: Invalid direction '{direction}' for metric '{metric_name}'. Use 'min' or 'max'"
+                )
+                return
+            metric_direction_map[metric_name.strip()] = direction.strip()
+
+    try:
+        # Analyze checkpoint status
+        keep_set, remove_set, deleted_set, reasons = analyze_checkpoint_status(
+            checkpoints_dir=args.checkpoints_dir,
+            storage_path=args.storage_path,
+            metric_direction_map=metric_direction_map,
+        )
+
+        # Generate and display report
+        report = format_checkpoint_report(
+            keep_set=keep_set,
+            remove_set=remove_set,
+            deleted_set=deleted_set,
+            reasons=reasons,
+            checkpoints_dir=args.checkpoints_dir,
+        )
+
+        print(report)
+
+        # Save report to file if requested
+        if args.output_report:
+            with open(args.output_report, "w") as f:
+                f.write(report)
+            print(f"Report saved to: {args.output_report}")
+
+        # Execute removal if requested
+        if remove_set and (args.remove or args.dry_run):
+            execute_checkpoint_removal(
+                remove_set=remove_set,
+                dry_run=not args.remove,  # dry_run=True unless --remove is specified
+            )
+        elif remove_set and not args.dry_run and not args.remove:
+            print("\nTo actually remove files, run with --remove flag.")
+            print("To see what would be removed, run with --dry-run flag.")
+
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        print(
+            "\nPlease update your metric_direction_map or use --custom-metrics to specify directions for missing metrics."
+        )
+    except Exception as e:
+        print(f"ERROR: An unexpected error occurred: {e}")
 
 
 def main():
@@ -244,12 +332,52 @@ def main():
         help="DPI for high-quality output suitable for printing. Default: 300.",
     )
 
+    checkpoint_parser = subparsers.add_parser(
+        "manage-checkpoints",
+        help="Analyze MLflow experiments to suggest which checkpoints to keep or remove",
+    )
+    checkpoint_parser.add_argument(
+        "--checkpoints-dir",
+        type=str,
+        required=True,
+        help="Path to the directory containing checkpoint files to analyze (e.g., './checkpoints').",
+    )
+    checkpoint_parser.add_argument(
+        "--storage-path",
+        type=str,
+        required=True,
+        help="Path to the MLflow storage folder containing experiment data (e.g., './mlflow').",
+    )
+    checkpoint_parser.add_argument(
+        "--custom-metrics",
+        type=str,
+        nargs="*",
+        help="Custom metric direction mappings in format 'metric_name:min' or 'metric_name:max' (e.g., 'custom_loss:min' 'my_score:max'). Optional.",
+    )
+    checkpoint_parser.add_argument(
+        "--output-report",
+        type=str,
+        help="Path to save the analysis report as a text file (e.g., 'checkpoint_report.txt'). Optional.",
+    )
+    checkpoint_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what checkpoints would be removed without actually removing them.",
+    )
+    checkpoint_parser.add_argument(
+        "--remove",
+        action="store_true",
+        help="Actually remove the suggested checkpoint files. Use with caution!",
+    )
+
     args = parser.parse_args()
 
     if args.command == "analyze":
         analyze_metrics(args)
     elif args.command == "compare-experiments":
         compare_experiments(args)
+    elif args.command == "manage-checkpoints":
+        manage_checkpoints(args)
     else:
         parser.print_help()
 
