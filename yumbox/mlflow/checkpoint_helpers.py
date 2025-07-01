@@ -35,7 +35,9 @@ def get_all_checkpoints(checkpoints_dir: str) -> set[str]:
 
 
 def get_experiment_checkpoints(
-    storage_path: str, metric_direction_map: dict[str, Literal["min", "max"]]
+    storage_path: str,
+    metric_direction_map: dict[str, Literal["min", "max"]],
+    ignore_metrics: set[str],
 ) -> tuple[set[str], dict[str, str]]:
     """
     Analyze MLflow experiments to find checkpoints to keep.
@@ -43,6 +45,7 @@ def get_experiment_checkpoints(
     Args:
         storage_path: Path to MLflow storage
         metric_direction_map: Dict mapping metric name patterns to 'min' or 'max'
+        ignore_metrics: A set of metric names to ignore during analysis.
 
     Returns:
         Tuple of (checkpoints_to_keep, reasons_dict)
@@ -124,6 +127,13 @@ def get_experiment_checkpoints(
 
         # Find best checkpoints for each metric
         for metric_name, metric_data in experiment_metrics.items():
+            for pattern in ignore_metrics:
+                if re.search(
+                    r"\b" + re.escape(pattern.lower()) + r"\b", metric_name.lower()
+                ):
+                    logger.info(f"Ignoring metric '{metric_name}' as requested.")
+                    continue
+
             if len(metric_data) <= 1:
                 continue  # Skip if only one data point
 
@@ -177,6 +187,7 @@ def analyze_checkpoint_status(
     checkpoints_dir: str,
     storage_path: str,
     metric_direction_map: dict[str, Literal["min", "max"]],
+    ignore_metrics: set[str],
 ) -> tuple[set[str], set[str], set[str], dict[str, str]]:
     """
     Analyze checkpoint status and provide recommendations.
@@ -185,6 +196,7 @@ def analyze_checkpoint_status(
         checkpoints_dir: Directory containing checkpoint files
         storage_path: Path to MLflow storage
         metric_direction_map: Dict mapping metric patterns to min/max
+        ignore_metrics: A set of metric names to ignore during analysis.
 
     Returns:
         Tuple of (keep_set, remove_set, deleted_set, reasons_dict)
@@ -196,7 +208,7 @@ def analyze_checkpoint_status(
 
     # Get checkpoints that should be kept based on MLflow analysis
     keep_checkpoints, reasons = get_experiment_checkpoints(
-        storage_path, metric_direction_map
+        storage_path, metric_direction_map, ignore_metrics
     )
 
     # Find deleted checkpoints (referenced in MLflow but not on disk)

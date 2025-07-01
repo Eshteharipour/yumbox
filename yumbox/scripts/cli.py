@@ -131,12 +131,19 @@ def manage_checkpoints(args):
                 return
             metric_direction_map[metric_name.strip()] = direction.strip()
 
+    # Define and combine ignored metrics
+    default_ignored_metrics = {"lr"}
+    user_ignored_metrics = set(args.ignore_metrics)
+    ignored_metrics = default_ignored_metrics.union(user_ignored_metrics)
+    print(f"Ignoring metrics: {', '.join(sorted(list(ignored_metrics)))}")
+
     try:
         # Analyze checkpoint status
         keep_set, remove_set, deleted_set, reasons = analyze_checkpoint_status(
             checkpoints_dir=args.checkpoints_dir,
             storage_path=args.storage_path,
             metric_direction_map=metric_direction_map,
+            ignore_metrics=ignored_metrics,
         )
 
         # Generate and display report
@@ -353,6 +360,13 @@ def main():
         type=str,
         nargs="*",
         help="Custom metric direction mappings in format 'metric_name:min' or 'metric_name:max' (e.g., 'custom_loss:min' 'my_score:max'). Optional.",
+    )
+    checkpoint_parser.add_argument(
+        "--ignore-metrics",
+        type=str,
+        nargs="*",
+        default=[],
+        help="Space-separated list of metric names to ignore during analysis (e.g., 'epoch'). 'lr' is ignored by default.",
     )
     checkpoint_parser.add_argument(
         "--output-report",
