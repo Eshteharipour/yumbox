@@ -127,10 +127,14 @@ def get_experiment_checkpoints(
             if len(metric_data) <= 1:
                 continue  # Skip if only one data point
 
+            import re
+
             # Determine direction for this metric
             direction = None
             for pattern, dir_val in metric_direction_map.items():
-                if pattern.lower() in metric_name.lower():
+                if re.search(
+                    r"\b" + re.escape(pattern.lower()) + r"\b", metric_name.lower()
+                ):
                     direction = dir_val
                     break
 
