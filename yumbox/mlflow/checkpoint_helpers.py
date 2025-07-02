@@ -103,7 +103,7 @@ def get_experiment_checkpoints(
             logger.info(f"Keeping last run checkpoint: {abs_path}")
 
         # Analyze metrics to find best performing runs
-        experiment_metrics = defaultdict(list)
+        experiment_metrics: defaultdict[str, list[dict[str, str]]] = defaultdict(list)
         run_checkpoint_map = {}
 
         # Collect all metrics and checkpoints from all runs
@@ -127,14 +127,29 @@ def get_experiment_checkpoints(
 
         # Find best checkpoints for each metric
         for metric_name, metric_data in experiment_metrics.items():
+            # if metric_name.lower() == "epoch":
+            #     continue
+
             import re
 
+            ignore_current_metric = False
             for pattern in ignore_metrics:
+
+                if pattern.lower() == metric_name.lower():
+                    logger.info(f"Ignoring metric '{metric_name}' as requested.")
+                    ignore_current_metric = True
+                    break
+
                 if re.search(
-                    r"\b" + re.escape(pattern.lower()) + r"\b", metric_name.lower()
+                    r"(?<![^ _-])" + re.escape(pattern.lower()) + r"(?![^ _-])",
+                    metric_name.lower(),
                 ):
                     logger.info(f"Ignoring metric '{metric_name}' as requested.")
-                    continue
+                    ignore_current_metric = True
+                    break
+
+            if ignore_current_metric == True:
+                continue
 
             if len(metric_data) <= 1:
                 continue  # Skip if only one data point
@@ -142,8 +157,15 @@ def get_experiment_checkpoints(
             # Determine direction for this metric
             direction = None
             for pattern, dir_val in metric_direction_map.items():
+                if metric_name.lower() == "epoch":
+                    direction = "max"
+                    break
+                if pattern.lower() == metric_name.lower():
+                    direction = dir_val
+                    break
                 if re.search(
-                    r"\b" + re.escape(pattern.lower()) + r"\b", metric_name.lower()
+                    r"(?<![^ _-])" + re.escape(pattern.lower()) + r"(?![^ _-])",
+                    metric_name.lower(),
                 ):
                     direction = dir_val
                     break

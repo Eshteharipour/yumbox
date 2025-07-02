@@ -110,6 +110,11 @@ def manage_checkpoints(args):
         "iou": "max",
         "bleu": "max",
         "rouge": "max",
+        "precision": "max",
+        "pr_auc": "max",
+        "roc_auc": "max",
+        "neg_dist": "max",
+        "pos_dist": "min",
     }
 
     # Add custom metric directions if provided
@@ -129,7 +134,7 @@ def manage_checkpoints(args):
             metric_direction_map[metric_name.strip()] = direction.strip()
 
     # Define and combine ignored metrics
-    default_ignored_metrics = {"lr"}
+    default_ignored_metrics = {"lr", "step"}
     user_ignored_metrics = set(args.ignore_metrics)
     ignored_metrics = default_ignored_metrics.union(user_ignored_metrics)
     print(f"Ignoring metrics: {', '.join(sorted(list(ignored_metrics)))}")
@@ -161,14 +166,8 @@ def manage_checkpoints(args):
             print(f"Report saved to: {args.output_report}")
 
         # Execute removal if requested
-        if remove_set and (args.remove or args.dry_run):
-            execute_checkpoint_removal(
-                remove_set=remove_set,
-                dry_run=not args.remove,  # dry_run=True unless --remove is specified
-            )
-        elif remove_set and not args.dry_run and not args.remove:
-            print("\nTo actually remove files, run with --remove flag.")
-            print("To see what would be removed, run with --dry-run flag.")
+        if remove_set and args.remove:
+            execute_checkpoint_removal(remove_set=remove_set, dry_run=args.dry_run)
 
     except ValueError as e:
         print(f"ERROR: {e}")
