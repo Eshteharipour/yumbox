@@ -2,22 +2,12 @@
 
 import argparse
 
-import pandas as pd
-
-from yumbox.mlflow import (
-    plot_metric_across_experiments,
-    process_experiment_metrics,
-    set_tracking_uri,
-    visualize_metrics,
-)
-from yumbox.mlflow.checkpoint_helpers import (
-    analyze_checkpoint_status,
-    execute_checkpoint_removal,
-    format_checkpoint_report,
-)
-
 
 def analyze_metrics(args):
+    import pandas as pd
+
+    from yumbox.mlflow import process_experiment_metrics, visualize_metrics
+
     """Process and visualize MLflow experiment metrics in one command."""
     # Run process_experiment_metrics
     df = process_experiment_metrics(
@@ -73,6 +63,8 @@ def analyze_metrics(args):
 
 def compare_experiments(args):
     """Compare metric across multiple experiments with print-friendly visualization."""
+    from yumbox.mlflow import plot_metric_across_experiments, set_tracking_uri
+
     set_tracking_uri(args.storage_path)
 
     plot_metric_across_experiments(
@@ -94,6 +86,11 @@ def compare_experiments(args):
 
 def manage_checkpoints(args):
     """Analyze and manage checkpoint files based on MLflow experiment data."""
+    from yumbox.mlflow.checkpoint_helpers import (
+        analyze_checkpoint_status,
+        execute_checkpoint_removal,
+        format_checkpoint_report,
+    )
 
     # Define metric direction mapping
     # You can expand this dict as needed for your specific metrics
