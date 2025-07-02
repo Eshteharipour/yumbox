@@ -617,6 +617,7 @@ def visualize_metrics(
     color_metric: Optional[str] = None,
     title: str = "Experiment Metrics Visualization",
     theme: str = "plotly_dark",
+    output_file: Optional[str] = None,
 ) -> None:
     """
     Visualize metrics using Plotly scatter plot.
@@ -628,6 +629,8 @@ def visualize_metrics(
         color_metric: Metric for color scale (optional)
         title: Plot title
         theme: Plotly theme (e.g., 'plotly', 'plotly_dark', 'plotly_white')
+        output_file: Path to save the plot (supports PNG, JPG, SVG, PDF, HTML formats).
+                    If None, displays plot interactively.
     """
     import plotly.express as px
     import plotly.io as pio
@@ -660,7 +663,39 @@ def visualize_metrics(
 
     fig.update_traces(marker=dict(size=12))
     fig.update_layout(showlegend=True)
-    fig.show()
+
+    # Save to file or show interactively
+    if output_file:
+        # Determine file format from extension
+        file_ext = output_file.lower().split(".")[-1]
+
+        if file_ext == "html":
+            # Save as interactive HTML
+            fig.write_html(output_file)
+            print(f"Interactive plot saved to {output_file}")
+        elif file_ext in ["png", "jpg", "jpeg", "svg", "pdf"]:
+            # Save as static image (requires kaleido package)
+            try:
+                fig.write_image(output_file)
+                print(f"Static plot saved to {output_file}")
+            except Exception as e:
+                print(f"Error saving static image: {e}")
+                print(
+                    "Make sure you have the 'kaleido' package installed for static image export:"
+                )
+                print("pip install kaleido")
+                # Fallback to HTML
+                html_file = output_file.rsplit(".", 1)[0] + ".html"
+                fig.write_html(html_file)
+                print(f"Saved as HTML instead: {html_file}")
+        else:
+            print(f"Unsupported file format: {file_ext}")
+            print("Supported formats: PNG, JPG, SVG, PDF, HTML")
+            print("Displaying plot interactively instead.")
+            fig.show()
+    else:
+        # Display interactively
+        fig.show()
 
 
 def cleanup_plots():

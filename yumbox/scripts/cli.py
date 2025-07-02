@@ -50,7 +50,7 @@ def analyze_metrics(args):
         df.to_csv(args.output_csv, index=False)
         print(f"Processed metrics saved to {args.output_csv}")
 
-    # Run visualize_metrics
+    # Run visualize_metrics with optional file output
     visualize_metrics(
         df=df,
         x_metric=args.x_metric,
@@ -58,6 +58,7 @@ def analyze_metrics(args):
         color_metric=args.color_metric,
         title=args.title,
         theme=args.theme,
+        output_file=args.output_plot,
     )
 
 
@@ -243,6 +244,11 @@ def main():
         "--output-csv",
         type=str,
         help="Path to save the processed metrics as a CSV file (e.g., 'metrics.csv'). Optional.",
+    )
+    analyze_parser.add_argument(
+        "--output-plot",
+        type=str,
+        help="Path to save the plot as an image file (e.g., 'plot.png', 'plot.html'). Supports PNG, JPG, SVG, PDF, and HTML formats. If not provided, plot will be displayed interactively. Optional.",
     )
     analyze_parser.add_argument(
         "--x-metric",
