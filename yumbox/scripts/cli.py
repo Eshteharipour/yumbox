@@ -179,6 +179,65 @@ def manage_checkpoints(args):
         print(f"ERROR: An unexpected error occurred: {e}")
 
 
+def find_best_metrics_command(args):
+    """CLI command to find best metrics across experiments."""
+    import pandas as pd
+
+    from yumbox.mlflow import find_best_metrics
+
+    # Process the best metrics
+    df = find_best_metrics(
+        storage_path=args.storage_path,
+        experiment_names=args.experiment_names,
+        metrics=args.metrics,
+        min_or_max=args.min_or_max,
+        run_mode=args.run_mode,
+        filter_string=args.filter,
+    )
+
+    if df.empty:
+        print("No data found. Exiting.")
+        return
+
+    # Set pandas display options for better output
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.max_colwidth", None)
+    pd.set_option("display.width", None)
+    pd.set_option("display.colheader_justify", "left")
+
+    # Print results using tabulate if available
+    try:
+        from tabulate import tabulate
+
+        print("\nBest Metrics Results:")
+        print("=" * 80)
+        print(
+            tabulate(
+                df,
+                headers="keys",
+                tablefmt="github",
+                showindex=False,
+                colalign=("left",),
+                floatfmt=".6f",
+            )
+        )
+    except ImportError:
+        print("\nBest Metrics Results:")
+        print("=" * 80)
+        print(df)
+
+    # Save to CSV if requested
+    if args.output_csv:
+        df.to_csv(args.output_csv, index=False)
+        print(f"\nResults saved to {args.output_csv}")
+
+    # Print summary statistics
+    print(f"\nSummary:")
+    print(f"- Total experiments processed: {df['experiment_name'].nunique()}")
+    print(f"- Total metrics analyzed: {df['metric_name'].nunique()}")
+    print(f"- Total best values found: {len(df)}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="CLI tool to analyze MLflow experiment metrics by processing and visualizing them."
@@ -187,7 +246,7 @@ def main():
         dest="command", help="Available commands", required=True
     )
 
-    # Subparser for analyze (wrapper)
+    # Subparser for analyze
     analyze_parser = subparsers.add_parser(
         "analyze", help="Process MLflow experiment metrics and generate a visualization"
     )
@@ -341,6 +400,7 @@ def main():
         help="DPI for high-quality output suitable for printing. Default: 300.",
     )
 
+    # Subparser for manage-checkpoints
     checkpoint_parser = subparsers.add_parser(
         "manage-checkpoints",
         help="Analyze MLflow experiments to suggest which checkpoints to keep or remove",
@@ -386,6 +446,57 @@ def main():
         help="Actually remove the suggested checkpoint files. Use with caution!",
     )
 
+    # Subparser for best-metrics
+    best_parser = subparsers.add_parser(
+        "best-metrics",
+        help="Find the best values for specified metrics across multiple experiments",
+    )
+    best_parser.add_argument(
+        "--storage-path",
+        type=str,
+        required=True,
+        help="Path to the MLflow storage folder containing experiment data (e.g., './mlflow').",
+    )
+    best_parser.add_argument(
+        "--experiment-names",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Space-separated list of experiment names to search (e.g., 'exp1' 'exp2' 'exp3').",
+    )
+    best_parser.add_argument(
+        "--metrics",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Space-separated list of metric names to find best values for (e.g., 'loss' 'accuracy' 'f1_score').",
+    )
+    best_parser.add_argument(
+        "--min-or-max",
+        type=str,
+        nargs="+",
+        required=True,
+        choices=["min", "max"],
+        help="Space-separated list of 'min' or 'max' for each metric, indicating whether lower or higher values are better. Must match the order and length of --metrics.",
+    )
+    best_parser.add_argument(
+        "--run-mode",
+        type=str,
+        choices=["parent", "children", "both"],
+        default="parent",
+        help="Filter runs: 'parent' (parent runs only), 'children' (child runs only), or 'both' (all runs). Default: 'parent'.",
+    )
+    best_parser.add_argument(
+        "--filter",
+        type=str,
+        help="MLflow filter string to select runs (e.g., \"params.dataset = 'lip'\"). Optional.",
+    )
+    best_parser.add_argument(
+        "--output-csv",
+        type=str,
+        help="Path to save the results as a CSV file (e.g., 'best_metrics.csv'). Optional.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "analyze":
@@ -394,6 +505,8 @@ def main():
         compare_experiments(args)
     elif args.command == "manage-checkpoints":
         manage_checkpoints(args)
+    elif args.command == "best-metrics":
+        find_best_metrics_command(args)
     else:
         parser.print_help()
 
