@@ -127,6 +127,8 @@ def get_experiment_checkpoints(
 
         # Find best checkpoints for each metric
         for metric_name, metric_data in experiment_metrics.items():
+            import re
+
             for pattern in ignore_metrics:
                 if re.search(
                     r"\b" + re.escape(pattern.lower()) + r"\b", metric_name.lower()
@@ -136,8 +138,6 @@ def get_experiment_checkpoints(
 
             if len(metric_data) <= 1:
                 continue  # Skip if only one data point
-
-            import re
 
             # Determine direction for this metric
             direction = None
