@@ -1175,12 +1175,23 @@ def find_best_metrics(
                     try:
                         epoch_history = client.get_metric_history(best_run_id, "epoch")
                         if epoch_history:
-                            # Find epoch value closest to our best step
-                            closest_epoch_metric = min(
-                                epoch_history, key=lambda x: abs(x.step - best_step)
-                            )
-                            best_epoch = closest_epoch_metric.value
-                    except:
+                            # Filter to only epochs that occurred at or before our best step
+                            valid_epochs = [
+                                e for e in epoch_history if e.step <= best_step
+                            ]
+                            if valid_epochs:
+                                # Find epoch value closest to our best step (but not after it)
+                                closest_epoch_metric = min(
+                                    valid_epochs, key=lambda x: abs(x.step - best_step)
+                                )
+                                best_epoch = closest_epoch_metric.value
+                            else:
+                                print(
+                                    f"No epoch metrics found at or before step {best_step}"
+                                )
+                                best_epoch = None
+                    except Exception as e:
+                        print(f"Error retrieving epoch history: {e}")
                         best_epoch = None
 
                 results.append(
