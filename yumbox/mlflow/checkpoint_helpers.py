@@ -240,6 +240,8 @@ def analyze_checkpoint_status(
     keep_set = keep_checkpoints & all_checkpoints
 
     # Find checkpoints to remove (exist on disk but not in keep list)
+    # TODO: only removed checkpoints referenced in mlflow,
+    # TODO: report a separate set for non-referenced checkpoints that exist in directory
     remove_set = all_checkpoints - keep_checkpoints
 
     logger.info(f"Analysis complete:")
