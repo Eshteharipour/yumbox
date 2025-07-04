@@ -10,7 +10,7 @@ from typing import Literal, Optional, Union
 import mlflow
 import numpy as np
 import pandas as pd
-from mlflow import MlflowClient
+from mlflow import MlflowClient, entities
 from omegaconf import DictConfig, OmegaConf
 
 from yumbox.cache import BFG
@@ -237,7 +237,7 @@ def get_mlflow_runs(
     experiment_name: str,
     status: Literal["success", "failed"] | None = "success",
     level: Literal["parent", "child"] | None = "parent",
-) -> list[mlflow.entities.Run]:
+) -> list[entities.Run]:
     """Get runs based on experiment name, status, and hierarchy level.
 
     Args:
@@ -248,7 +248,7 @@ def get_mlflow_runs(
                     None for all runs regardless of hierarchy
 
     Returns:
-        List[mlflow.entities.Run]: List of runs matching the criteria, sorted by start_time DESC
+        List[entities.Run]: List of runs matching the criteria, sorted by start_time DESC
     """
     logger = BFG["logger"]
 
@@ -273,7 +273,7 @@ def get_mlflow_runs(
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         filter_string=filter_string,
-        run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+        run_view_type=entities.ViewType.ACTIVE_ONLY,
         order_by=["start_time DESC"],  # new to old
     )
 
@@ -302,7 +302,7 @@ def get_mlflow_runs(
 
 
 # Helper functions for backward compatibility and convenience
-def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Run]:
+def get_last_successful_run(experiment_name: str) -> Optional[entities.Run]:
     """Find the most recent successful parent run."""
     logger = BFG["logger"]
     runs = get_mlflow_runs(experiment_name, status="success", level="parent")
@@ -315,14 +315,14 @@ def get_last_successful_run(experiment_name: str) -> Optional[mlflow.entities.Ru
         logger.warning(f"No successful runs found for experiment '{experiment_name}'")
 
 
-def get_last_run_failed(experiment_name: str) -> Optional[mlflow.entities.Run]:
+def get_last_run_failed(experiment_name: str) -> Optional[entities.Run]:
     """Find the most recent run and return it if it's failed.
 
     Args:
         experiment_name (str): Name of the MLflow experiment
 
     Returns:
-        Optional[mlflow.entities.Run]: Most recent run if it' has failed or None
+        Optional[entities.Run]: Most recent run if it' has failed or None
     """
     logger = BFG["logger"]
 
@@ -337,7 +337,7 @@ def get_last_run_failed(experiment_name: str) -> Optional[mlflow.entities.Run]:
     # Filter for only completed runs
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
-        run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+        run_view_type=entities.ViewType.ACTIVE_ONLY,
         order_by=["start_time DESC"],
     )
     runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
@@ -425,7 +425,7 @@ def plot_metric_across_runs(
         df = mlflow.search_runs(
             experiment_ids=[experiment_id],
             filter_string="status = 'FINISHED'",
-            run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+            run_view_type=entities.ViewType.ACTIVE_ONLY,
             order_by=["start_time ASC"],
         )
         if "tags.mlflow.parentRunId" in df.columns:
@@ -440,7 +440,7 @@ def plot_metric_across_runs(
         )
         df = mlflow.search_runs(
             filter_string=filter_string,
-            run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+            run_view_type=entities.ViewType.ACTIVE_ONLY,
             order_by=["start_time ASC"],
         )
 
@@ -522,9 +522,7 @@ def process_experiment_metrics(
     client = MlflowClient()
 
     # Get all active experiments
-    experiments = client.search_experiments(
-        view_type=mlflow.entities.ViewType.ACTIVE_ONLY
-    )
+    experiments = client.search_experiments(view_type=entities.ViewType.ACTIVE_ONLY)
     if not experiments:
         print("No active experiments found")
         return pd.DataFrame()
@@ -540,7 +538,7 @@ def process_experiment_metrics(
         runs = client.search_runs(
             experiment_ids=[exp.experiment_id],
             filter_string=filter_string,
-            run_view_type=mlflow.entities.ViewType.ACTIVE_ONLY,
+            run_view_type=entities.ViewType.ACTIVE_ONLY,
             order_by=["start_time DESC"],
         )
 
