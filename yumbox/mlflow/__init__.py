@@ -237,8 +237,9 @@ def get_mlflow_runs(
     experiment_name: str,
     status: Literal["success", "failed"] | None = "success",
     level: Literal["parent", "child"] | None = "parent",
+    filter: str | None = None,
 ) -> list[entities.Run]:
-    """Get runs based on experiment name, status, and hierarchy level.
+    """Get runs based on experiment name, status, hierarchy level, and optional filter.
 
     Args:
         experiment_name (str): Name of the MLflow experiment
@@ -246,6 +247,8 @@ def get_mlflow_runs(
                      None for any status
         level (str): Run hierarchy level - "parent" for parent runs only, "child" for child runs only,
                     None for all runs regardless of hierarchy
+        filter (str): Optional MLflow filter string for additional filtering on params, metrics, or tags.
+                     Examples: "params.dataset = 'valid'", "metrics.accuracy > 0.8", "tags.model_type = 'bert'"
 
     Returns:
         List[entities.Run]: List of runs matching the criteria, sorted by start_time DESC
@@ -267,9 +270,13 @@ def get_mlflow_runs(
     elif status and status.lower() == "failed":
         filter_conditions.append("status = 'FAILED'")
 
+    # Add custom filter if provided
+    if filter:
+        filter_conditions.append(filter)
+
     filter_string = " AND ".join(filter_conditions) if filter_conditions else ""
 
-    # Search runs with status filter
+    # Search runs with combined filter
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         filter_string=filter_string,
@@ -287,12 +294,12 @@ def get_mlflow_runs(
 
     if not runs:
         logger.info(
-            f"No runs found for experiment '{experiment_name}' with status='{status}' and level='{level}'"
+            f"No runs found for experiment '{experiment_name}' with status='{status}', level='{level}', and filter='{filter}'"
         )
         return []
 
     logger.info(
-        f"Found {len(runs)} run(s) for experiment '{experiment_name}' with status='{status}' and level='{level}'"
+        f"Found {len(runs)} run(s) for experiment '{experiment_name}' with status='{status}', level='{level}', and filter='{filter}'"
     )
     return runs
 
