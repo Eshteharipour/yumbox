@@ -38,7 +38,7 @@ def get_experiment_checkpoints(
     storage_path: str,
     metric_direction_map: dict[str, Literal["min", "max"]],
     ignore_metrics: set[str],
-) -> tuple[set[str], dict[str, str]]:
+) -> tuple[set[str], dict[str, str], set[str]]:
     """
     Analyze MLflow experiments to find checkpoints to keep.
 
@@ -48,9 +48,10 @@ def get_experiment_checkpoints(
         ignore_metrics: A set of metric names to ignore during analysis.
 
     Returns:
-        Tuple of (checkpoints_to_keep, reasons_dict)
+        Tuple of (checkpoints_to_keep, reasons_dict, all_referenced_checkpoints)
         - checkpoints_to_keep: Set of absolute paths to keep
         - reasons_dict: Dict mapping checkpoint path to reason for keeping
+        - all_referenced_checkpoints: Set of all checkpoints referenced in MLflow
     """
     logger = BFG["logger"]
 
@@ -61,6 +62,7 @@ def get_experiment_checkpoints(
     client = MlflowClient()
 
     checkpoints_to_keep = set()
+    all_referenced_checkpoints = set()
     reasons = {}
 
     # Get all active experiments
@@ -70,7 +72,7 @@ def get_experiment_checkpoints(
 
     if not experiments:
         logger.warning("No active experiments found")
-        return checkpoints_to_keep, reasons
+        return checkpoints_to_keep, reasons, all_referenced_checkpoints
 
     missing_direction_keys = set()
 
@@ -99,6 +101,7 @@ def get_experiment_checkpoints(
         if last_run_checkpoint and os.path.exists(last_run_checkpoint):
             abs_path = os.path.abspath(last_run_checkpoint)
             checkpoints_to_keep.add(abs_path)
+            all_referenced_checkpoints.add(abs_path)
             reasons[abs_path] = f"last_run_{exp.name}"
             logger.info(f"Keeping last run checkpoint: {abs_path}")
 
@@ -109,10 +112,15 @@ def get_experiment_checkpoints(
         # Collect all metrics and checkpoints from all runs
         for run in parent_runs:
             checkpoint_path = run.data.params.get("model_path")
-            if not checkpoint_path or not os.path.exists(checkpoint_path):
+            if not checkpoint_path:
                 continue
 
             abs_checkpoint_path = os.path.abspath(checkpoint_path)
+            all_referenced_checkpoints.add(abs_checkpoint_path)
+
+            if not os.path.exists(checkpoint_path):
+                continue
+
             run_checkpoint_map[run.info.run_id] = abs_checkpoint_path
 
             # Collect metrics for this run
@@ -202,7 +210,7 @@ def get_experiment_checkpoints(
         )
 
     logger.info(f"Total checkpoints to keep: {len(checkpoints_to_keep)}")
-    return checkpoints_to_keep, reasons
+    return checkpoints_to_keep, reasons, all_referenced_checkpoints
 
 
 def analyze_checkpoint_status(
@@ -210,7 +218,7 @@ def analyze_checkpoint_status(
     storage_path: str,
     metric_direction_map: dict[str, Literal["min", "max"]],
     ignore_metrics: set[str],
-) -> tuple[set[str], set[str], set[str], dict[str, str]]:
+) -> tuple[set[str], set[str], set[str], set[str], dict[str, str]]:
     """
     Analyze checkpoint status and provide recommendations.
 
@@ -221,7 +229,12 @@ def analyze_checkpoint_status(
         ignore_metrics: A set of metric names to ignore during analysis.
 
     Returns:
-        Tuple of (keep_set, remove_set, deleted_set, reasons_dict)
+        Tuple of (keep_set, remove_set, deleted_set, non_referenced_set, reasons_dict)
+        - keep_set: Checkpoints that exist on disk and should be kept
+        - remove_set: MLflow-referenced checkpoints that exist on disk but should be removed
+        - deleted_set: MLflow-referenced checkpoints that are missing from disk
+        - non_referenced_set: Checkpoints that exist on disk but are not referenced in MLflow
+        - reasons_dict: Dict mapping checkpoint path to reason for keeping
     """
     logger = BFG["logger"]
 
@@ -229,33 +242,39 @@ def analyze_checkpoint_status(
     all_checkpoints = get_all_checkpoints(checkpoints_dir)
 
     # Get checkpoints that should be kept based on MLflow analysis
-    keep_checkpoints, reasons = get_experiment_checkpoints(
+    keep_checkpoints, reasons, all_referenced_checkpoints = get_experiment_checkpoints(
         storage_path, metric_direction_map, ignore_metrics
     )
 
     # Find deleted checkpoints (referenced in MLflow but not on disk)
-    deleted_checkpoints = keep_checkpoints - all_checkpoints
+    deleted_checkpoints = all_referenced_checkpoints - all_checkpoints
 
     # Find checkpoints to keep (exist on disk and should be kept)
     keep_set = keep_checkpoints & all_checkpoints
 
-    # Find checkpoints to remove (exist on disk but not in keep list)
-    # TODO: only removed checkpoints referenced in mlflow,
-    # TODO: report a separate set for non-referenced checkpoints that exist in directory
-    remove_set = all_checkpoints - keep_checkpoints
+    # Find MLflow-referenced checkpoints that exist on disk
+    referenced_on_disk = all_referenced_checkpoints & all_checkpoints
+
+    # Find checkpoints to remove (MLflow-referenced, exist on disk, but not in keep list)
+    remove_set = referenced_on_disk - keep_checkpoints
+
+    # Find non-referenced checkpoints (exist on disk but not referenced in MLflow)
+    non_referenced_set = all_checkpoints - all_referenced_checkpoints
 
     logger.info(f"Analysis complete:")
     logger.info(f"  - Checkpoints to keep: {len(keep_set)}")
-    logger.info(f"  - Checkpoints to remove: {len(remove_set)}")
+    logger.info(f"  - MLflow-referenced checkpoints to remove: {len(remove_set)}")
     logger.info(f"  - Already deleted checkpoints: {len(deleted_checkpoints)}")
+    logger.info(f"  - Non-referenced checkpoints: {len(non_referenced_set)}")
 
-    return keep_set, remove_set, deleted_checkpoints, reasons
+    return keep_set, remove_set, deleted_checkpoints, non_referenced_set, reasons
 
 
 def format_checkpoint_report(
     keep_set: set[str],
     remove_set: set[str],
     deleted_set: set[str],
+    non_referenced_set: set[str],
     reasons: dict[str, str],
     checkpoints_dir: str,
 ) -> str:
@@ -277,8 +296,9 @@ def format_checkpoint_report(
     # Summary
     report.append("SUMMARY:")
     report.append(f"  Total checkpoints to keep: {len(keep_set)}")
-    report.append(f"  Total checkpoints to remove: {len(remove_set)}")
+    report.append(f"  MLflow-referenced checkpoints to remove: {len(remove_set)}")
     report.append(f"  Already deleted checkpoints: {len(deleted_set)}")
+    report.append(f"  Non-referenced checkpoints: {len(non_referenced_set)}")
     report.append("")
 
     # Checkpoints to keep
@@ -291,12 +311,20 @@ def format_checkpoint_report(
             report.append(f"        Reason: {reason}")
             report.append("")
 
-    # Checkpoints to remove
+    # MLflow-referenced checkpoints to remove
     if remove_set:
-        report.append("CHECKPOINTS TO REMOVE:")
+        report.append("MLFLOW-REFERENCED CHECKPOINTS TO REMOVE:")
         report.append("-" * 40)
         for checkpoint in sorted(remove_set):
             report.append(f"  REMOVE: {relative_path(checkpoint)}")
+        report.append("")
+
+    # Non-referenced checkpoints
+    if non_referenced_set:
+        report.append("NON-REFERENCED CHECKPOINTS (not in MLflow experiments):")
+        report.append("-" * 40)
+        for checkpoint in sorted(non_referenced_set):
+            report.append(f"  NON-REF: {relative_path(checkpoint)}")
         report.append("")
 
     # Deleted checkpoints
@@ -310,14 +338,31 @@ def format_checkpoint_report(
         report.append("")
 
     # Disk usage estimation
+    total_remove_size = 0
+    total_non_ref_size = 0
+
     if remove_set:
-        total_size = 0
         for checkpoint in remove_set:
             if os.path.exists(checkpoint):
-                total_size += os.path.getsize(checkpoint)
+                total_remove_size += os.path.getsize(checkpoint)
 
-        size_gb = total_size / (1024**3)
-        report.append(f"ESTIMATED SPACE TO FREE: {size_gb:.2f} GB")
+    if non_referenced_set:
+        for checkpoint in non_referenced_set:
+            if os.path.exists(checkpoint):
+                total_non_ref_size += os.path.getsize(checkpoint)
+
+    if total_remove_size > 0 or total_non_ref_size > 0:
+        report.append("DISK USAGE ANALYSIS:")
+        report.append("-" * 40)
+        if total_remove_size > 0:
+            size_gb = total_remove_size / (1024**3)
+            report.append(f"  Space from MLflow-referenced removals: {size_gb:.2f} GB")
+        if total_non_ref_size > 0:
+            size_gb = total_non_ref_size / (1024**3)
+            report.append(f"  Space from non-referenced checkpoints: {size_gb:.2f} GB")
+        if total_remove_size > 0 and total_non_ref_size > 0:
+            total_size_gb = (total_remove_size + total_non_ref_size) / (1024**3)
+            report.append(f"  Total potential space to free: {total_size_gb:.2f} GB")
         report.append("")
 
     report.append("=" * 80)

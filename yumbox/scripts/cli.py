@@ -142,11 +142,13 @@ def manage_checkpoints(args):
 
     try:
         # Analyze checkpoint status
-        keep_set, remove_set, deleted_set, reasons = analyze_checkpoint_status(
-            checkpoints_dir=args.checkpoints_dir,
-            storage_path=args.storage_path,
-            metric_direction_map=metric_direction_map,
-            ignore_metrics=ignored_metrics,
+        keep_set, remove_set, deleted_set, non_referenced_set, reasons = (
+            analyze_checkpoint_status(
+                checkpoints_dir=args.checkpoints_dir,
+                storage_path=args.storage_path,
+                metric_direction_map=metric_direction_map,
+                ignore_metrics=ignored_metrics,
+            )
         )
 
         # Generate and display report
@@ -154,6 +156,7 @@ def manage_checkpoints(args):
             keep_set=keep_set,
             remove_set=remove_set,
             deleted_set=deleted_set,
+            non_referenced_set=non_referenced_set,
             reasons=reasons,
             checkpoints_dir=args.checkpoints_dir,
         )
