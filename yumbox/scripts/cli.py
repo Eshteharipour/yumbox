@@ -241,6 +241,70 @@ def find_best_metrics_command(args):
     print(f"- Total best values found: {len(df)}")
 
 
+def show_help(args):
+    """Display comprehensive help for metrics-cli commands."""
+
+    from .metric_cli_helper import (
+        print_command_details,
+        print_command_list,
+        print_common_patterns,
+        print_quick_start,
+        print_troubleshooting,
+    )
+
+    help_type = getattr(args, "help_type", "list")
+    command = getattr(args, "command", None)
+
+    if help_type == "list":
+        print_command_list()
+    elif help_type == "details":
+        print_command_details(command)
+    elif help_type == "quick-start":
+        print_quick_start()
+    elif help_type == "patterns":
+        print_common_patterns()
+    elif help_type == "troubleshooting":
+        print_troubleshooting()
+
+
+def show_simple_help():
+    """Simple help function that can be embedded directly in cli.py"""
+    print(
+        """
+📊 METRICS-CLI HELP
+
+AVAILABLE COMMANDS:
+  analyze              Process and visualize MLflow experiment metrics
+  compare-experiments  Compare single metric across multiple experiments  
+  manage-checkpoints   Analyze and manage checkpoint files
+  best-metrics        Find best values for specified metrics
+
+QUICK EXAMPLES:
+
+🔍 Analyze experiments:
+  metrics-cli analyze --storage-path ./mlflow --select-metrics accuracy loss \\
+    --metrics-to-mean accuracy --mean-metric-name avg_acc --sort-metric avg_acc \\
+    --x-metric accuracy --y-metric loss
+
+📈 Compare experiments:  
+  metrics-cli compare-experiments --storage-path ./mlflow \\
+    --experiment-names exp1 exp2 --metric val_loss --mode epoch \\
+    --output-file comparison.png
+
+🗂️  Manage checkpoints:
+  metrics-cli manage-checkpoints --checkpoints-dir ./models \\
+    --storage-path ./mlflow --dry-run --output-report report.txt
+
+🏆 Find best metrics:
+  metrics-cli best-metrics --storage-path ./mlflow \\
+    --experiment-names exp1 exp2 --metrics accuracy f1_score \\
+    --min-or-max max max --output-csv best_models.csv
+
+For detailed help: metrics-cli <command> --help
+"""
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="CLI tool to analyze MLflow experiment metrics by processing and visualizing them."
@@ -500,6 +564,28 @@ def main():
         help="Path to save the results as a CSV file (e.g., 'best_metrics.csv'). Optional.",
     )
 
+    help_parser = subparsers.add_parser(
+        "help", help="Show comprehensive help and examples for metrics-cli commands"
+    )
+    help_parser.add_argument(
+        "help_type",
+        nargs="?",
+        choices=["list", "details", "quick-start", "patterns", "troubleshooting"],
+        default="list",
+        help="Type of help to display (default: list)",
+    )
+    help_parser.add_argument(
+        "--cmd",
+        "-c",
+        choices=[
+            "analyze",
+            "compare-experiments",
+            "manage-checkpoints",
+            "best-metrics",
+        ],
+        help="Show details for specific command",
+    )
+
     args = parser.parse_args()
 
     if args.command == "analyze":
@@ -510,6 +596,8 @@ def main():
         manage_checkpoints(args)
     elif args.command == "best-metrics":
         find_best_metrics_command(args)
+    elif args.command == "help":
+        show_help(args)
     else:
         parser.print_help()
 
