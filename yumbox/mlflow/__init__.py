@@ -730,7 +730,7 @@ def cleanup_plots():
 def plot_metric_across_experiments(
     experiment_names: list[str],
     metric_key: str,
-    mode: Literal["step", "epoch"] = "step",
+    mode: Literal["step", "epoch"] = "epoch",
     legend_names: list[str] = None,
     artifact_file: str = None,
     title: str = None,
@@ -887,6 +887,9 @@ def plot_metric_across_experiments(
                     )
                     continue
 
+            # Properly convert Step to Epoch
+            all_x_values = list(np.arange(0, len(runs), len(runs) / len(all_x_values)))
+
             # Plot all points together for epoch mode
             if all_x_values and all_y_values:
                 # Sort by x-values to ensure proper line connections
@@ -905,15 +908,15 @@ def plot_metric_across_experiments(
                     marker=current_marker,
                     color=current_color,
                     markersize=marker_size,
-                    linewidth=1.5,
+                    linewidth=2.0,
                     alpha=0.8,
                     label=f"{legend_name} ({runs_plotted} runs)",
                     markerfacecolor="white",
                     markeredgecolor=current_color,
-                    markeredgewidth=1.5,
+                    markeredgewidth=6.0,
                 )
 
-            x_label = "Step"  # Actually showing steps, but representing epochs
+            x_label = "Epoch"  # Actually showing steps, but representing epochs
 
         else:
             # Step mode - plot each run separately (original behavior)
@@ -966,12 +969,12 @@ def plot_metric_across_experiments(
                         marker=current_marker,
                         color=current_color,
                         markersize=marker_size,
-                        linewidth=1.5,
+                        linewidth=2.0,
                         alpha=0.8,
                         label=f"{legend_name} (Run {run_idx+1})",
                         markerfacecolor="white",
                         markeredgecolor=current_color,
-                        markeredgewidth=1.5,
+                        markeredgewidth=6.0,
                     )
 
                     runs_plotted += 1
@@ -997,7 +1000,8 @@ def plot_metric_across_experiments(
                     markersize=marker_size,
                     markerfacecolor="white",
                     markeredgecolor=current_color,
-                    markeredgewidth=1.5,
+                    linewidth=2.0,
+                    markeredgewidth=6.0,
                     label=f"{legend_name} ({runs_plotted} runs)",
                 )
             )
