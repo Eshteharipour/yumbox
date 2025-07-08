@@ -196,6 +196,7 @@ def find_best_metrics_command(args):
         min_or_max=args.min_or_max,
         run_mode=args.run_mode,
         filter_string=args.filter,
+        aggregation_mode=args.aggregation_mode,
     )
 
     if df.empty:
@@ -529,14 +530,14 @@ def main():
         type=str,
         nargs="+",
         required=True,
-        help="Space-separated list of experiment names to search (e.g., 'exp1' 'exp2' 'exp3').",
+        help="Space-separated list of experiment names to search (e.g., 'exp1' 'exp2' 'exp3'). Supports regex patterns. Use 'none' to include all experiments.",
     )
     best_parser.add_argument(
         "--metrics",
         type=str,
         nargs="+",
         required=True,
-        help="Space-separated list of metric names to find best values for (e.g., 'loss' 'accuracy' 'f1_score').",
+        help="Space-separated list of metric names to find best values for (e.g., 'loss' 'accuracy' 'f1_score'). Supports regex patterns. Use 'none' to include all metrics.",
     )
     best_parser.add_argument(
         "--min-or-max",
@@ -557,6 +558,13 @@ def main():
         "--filter",
         type=str,
         help="MLflow filter string to select runs (e.g., \"params.dataset = 'lip'\"). Optional.",
+    )
+    best_parser.add_argument(
+        "--aggregation-mode",
+        type=str,
+        choices=["all_runs", "best_run"],
+        default="all_runs",
+        help="'all_runs' shows all runs, 'best_run' to keep only the best run per metric. Default: 'all_runs'.",
     )
     best_parser.add_argument(
         "--output-csv",

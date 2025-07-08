@@ -1,6 +1,6 @@
 import os
+import re
 import subprocess
-import sys
 import tempfile
 from datetime import datetime
 from logging import Logger
@@ -1057,17 +1057,19 @@ def find_best_metrics(
     min_or_max: list[str],
     run_mode: Literal["parent", "children", "both"] = "both",
     filter_string: str = None,
+    aggregation_mode: Literal["all_runs", "best_run"] = "all_runs",
 ) -> pd.DataFrame:
     """
     Find the best values for specified metrics across experiments.
 
     Args:
         storage_path: Path to MLflow storage folder
-        experiment_names: List of experiment names to search
-        metrics: List of metric names to find best values for
+        experiment_names: List of experiment names to search (supports regex patterns)
+        metrics: List of metric names to find best values for (supports regex patterns)
         min_or_max: List of 'min' or 'max' corresponding to each metric
         run_mode: Filter runs by 'parent', 'children', or 'both'
         filter_string: Optional MLflow filter string
+        aggregation_mode: 'all_runs' for current behavior, 'best_run' to keep only best run per metric
 
     Returns:
         pandas.DataFrame: Results with best values, steps, epochs, and run info
@@ -1086,13 +1088,47 @@ def find_best_metrics(
     set_tracking_uri(storage_path)
     client = MlflowClient()
 
+    # Get all available experiments
+    all_experiments = client.search_experiments()
+
+    # Match experiment names using regex
+    matched_experiments = []
+    for exp_pattern in experiment_names:
+        if exp_pattern is None or exp_pattern == "none":
+            # Include all experiments
+            matched_experiments.extend([exp.name for exp in all_experiments])
+        else:
+            try:
+                regex_pattern = re.compile(exp_pattern)
+                matched_exp_names = [
+                    exp.name
+                    for exp in all_experiments
+                    if regex_pattern.search(exp.name)
+                ]
+                if matched_exp_names:
+                    matched_experiments.extend(matched_exp_names)
+                else:
+                    print(f"No experiments found matching pattern: {exp_pattern}")
+            except re.error as e:
+                print(f"Invalid regex pattern '{exp_pattern}': {e}")
+                continue
+
+    # Remove duplicates while preserving order
+    matched_experiments = list(dict.fromkeys(matched_experiments))
+
+    if not matched_experiments:
+        print("No experiments found matching the provided patterns")
+        return pd.DataFrame()
+
     results = []
 
-    for exp_name in experiment_names:
+    for exp_name in matched_experiments:
         print(f"Processing experiment: {exp_name}")
 
         # Get runs for this experiment
-        runs = get_mlflow_runs(exp_name, status="success", level=None)
+        runs = get_mlflow_runs(
+            exp_name, status="success", level=None, filter=filter_string
+        )
 
         if not runs:
             print(f"No successful runs found for experiment '{exp_name}'")
@@ -1110,8 +1146,59 @@ def find_best_metrics(
             )
             continue
 
+        # Get all available metrics from runs to support regex matching
+        all_metrics_in_exp = set()
+        for run in runs:
+            all_metrics_in_exp.update(run.data.metrics.keys())
+            # Also get metric history keys
+            try:
+                for metric_key in run.data.metrics.keys():
+                    metric_history = client.get_metric_history(
+                        run.info.run_id, metric_key
+                    )
+                    if metric_history:
+                        all_metrics_in_exp.add(metric_key)
+            except:
+                pass
+
+        # Match metrics using regex
+        matched_metrics = []
+        matched_directions = []
+
+        for i, metric_pattern in enumerate(metrics):
+            if metric_pattern is None or metric_pattern == "none":
+                # Include all metrics
+                matched_metrics.extend(list(all_metrics_in_exp))
+                matched_directions.extend([min_or_max[i]] * len(all_metrics_in_exp))
+            else:
+                try:
+                    regex_pattern = re.compile(metric_pattern)
+                    matched_metric_names = [
+                        m for m in all_metrics_in_exp if regex_pattern.search(m)
+                    ]
+                    if matched_metric_names:
+                        matched_metrics.extend(matched_metric_names)
+                        matched_directions.extend(
+                            [min_or_max[i]] * len(matched_metric_names)
+                        )
+                    else:
+                        print(f"No metrics found matching pattern: {metric_pattern}")
+                except re.error as e:
+                    print(f"Invalid regex pattern '{metric_pattern}': {e}")
+                    continue
+
+        # Remove duplicates while preserving order
+        unique_metrics = []
+        unique_directions = []
+        seen = set()
+        for metric, direction in zip(matched_metrics, matched_directions):
+            if metric not in seen:
+                unique_metrics.append(metric)
+                unique_directions.append(direction)
+                seen.add(metric)
+
         # Process each metric
-        for metric_name, direction in zip(metrics, min_or_max):
+        for metric_name, direction in zip(unique_metrics, unique_directions):
             best_value = None
             best_step = None
             best_epoch = None
@@ -1226,6 +1313,21 @@ def find_best_metrics(
         return pd.DataFrame()
 
     df = pd.DataFrame(results)
+
+    # Apply aggregation mode
+    if aggregation_mode == "best_run":
+        # Keep only the best run for each metric
+        best_runs = []
+        for metric_name in df["metric_name"].unique():
+            metric_df = df[df["metric_name"] == metric_name]
+            for optimization in metric_df["optimization"].unique():
+                opt_df = metric_df[metric_df["optimization"] == optimization]
+                if optimization == "min":
+                    best_row = opt_df.loc[opt_df["best_value"].idxmin()]
+                else:  # max
+                    best_row = opt_df.loc[opt_df["best_value"].idxmax()]
+                best_runs.append(best_row)
+        df = pd.DataFrame(best_runs)
 
     # Sort by experiment name, then by metric name
     df = df.sort_values(["experiment_name", "metric_name"])
