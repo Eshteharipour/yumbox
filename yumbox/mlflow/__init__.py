@@ -1072,7 +1072,7 @@ def find_best_metrics(
         aggregation_mode: 'all_runs' for current behavior, 'best_run' to keep only best run per metric
 
     Returns:
-        pandas.DataFrame: Results with metrics as columns, experiments/runs as rows
+        pandas.DataFrame: Results with best values, steps, epochs, and run info
     """
     from mlflow import MlflowClient
 
@@ -1120,9 +1120,7 @@ def find_best_metrics(
         print("No experiments found matching the provided patterns")
         return pd.DataFrame()
 
-    # First, collect all metrics across all experiments to get the full set
-    all_matched_metrics = set()
-    metric_directions = {}  # metric_name -> direction
+    results = []
 
     for exp_name in matched_experiments:
         print(f"Processing experiment: {exp_name}")
@@ -1163,68 +1161,53 @@ def find_best_metrics(
             except:
                 pass
 
-        # Match metrics using regex for this experiment
+        # Match metrics using regex
+        matched_metrics = []
+        matched_directions = []
+
         for i, metric_pattern in enumerate(metrics):
             if metric_pattern is None or metric_pattern == "none":
-                for metric_name in all_metrics_in_exp:
-                    all_matched_metrics.add(metric_name)
-                    metric_directions[metric_name] = min_or_max[i]
+                # Include all metrics
+                matched_metrics.extend(list(all_metrics_in_exp))
+                matched_directions.extend([min_or_max[i]] * len(all_metrics_in_exp))
             else:
                 try:
                     regex_pattern = re.compile(metric_pattern)
                     matched_metric_names = [
                         m for m in all_metrics_in_exp if regex_pattern.search(m)
                     ]
-                    for metric_name in matched_metric_names:
-                        all_matched_metrics.add(metric_name)
-                        metric_directions[metric_name] = min_or_max[i]
+                    if matched_metric_names:
+                        matched_metrics.extend(matched_metric_names)
+                        matched_directions.extend(
+                            [min_or_max[i]] * len(matched_metric_names)
+                        )
+                    else:
+                        print(f"No metrics found matching pattern: {metric_pattern}")
                 except re.error as e:
                     print(f"Invalid regex pattern '{metric_pattern}': {e}")
                     continue
 
-    if not all_matched_metrics:
-        print("No metrics found matching the provided patterns")
-        return pd.DataFrame()
+        # Remove duplicates while preserving order
+        unique_metrics = []
+        unique_directions = []
+        seen = set()
+        for metric, direction in zip(matched_metrics, matched_directions):
+            if metric not in seen:
+                unique_metrics.append(metric)
+                unique_directions.append(direction)
+                seen.add(metric)
 
-    # Now collect results for each experiment/run combination
-    results = []
+        # Process each metric
+        for metric_name, direction in zip(unique_metrics, unique_directions):
+            best_value = None
+            best_step = None
+            best_epoch = None
+            best_run_id = None
+            best_run_name = None
 
-    for exp_name in matched_experiments:
-        print(f"Processing experiment: {exp_name}")
+            print(f"  Finding best {direction} for metric: {metric_name}")
 
-        # Get runs for this experiment
-        runs = get_mlflow_runs(
-            exp_name, status="success", level=None, filter=filter_string
-        )
-
-        if not runs:
-            print(f"No successful runs found for experiment '{exp_name}'")
-            continue
-
-        # Apply run mode filtering
-        if run_mode == "children":
-            runs = [run for run in runs if "mlflow.parentRunId" in run.data.tags]
-        elif run_mode == "parent":
-            runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
-
-        if not runs:
-            print(
-                f"No runs found for experiment '{exp_name}' with run_mode '{run_mode}'"
-            )
-            continue
-
-        # For each run, collect best values for all metrics
-        for run in runs:
-            run_result = {
-                "experiment_name": exp_name,
-                "run_id": run.info.run_id,
-                "run_name": run.data.tags.get("mlflow.runName", run.info.run_id),
-            }
-
-            # Add each metric as a column
-            for metric_name in all_matched_metrics:
-                direction = metric_directions[metric_name]
-
+            for run in runs:
                 try:
                     # Get metric history for this run
                     metric_history = client.get_metric_history(
@@ -1232,54 +1215,97 @@ def find_best_metrics(
                     )
 
                     if not metric_history:
-                        run_result[metric_name] = np.nan
-                        run_result[f"{metric_name}_step"] = np.nan
-                        run_result[f"{metric_name}_epoch"] = np.nan
                         continue
 
                     # Find best value in this run's history
                     if direction == "min":
-                        best_metric = min(metric_history, key=lambda x: x.value)
+                        run_best_metric = min(metric_history, key=lambda x: x.value)
                     else:  # max
-                        best_metric = max(metric_history, key=lambda x: x.value)
+                        run_best_metric = max(metric_history, key=lambda x: x.value)
 
-                    run_result[metric_name] = best_metric.value
-                    run_result[f"{metric_name}_step"] = best_metric.step
-
-                    # Try to get epoch
-                    epoch_value = run.data.metrics.get("epoch", None)
-                    if epoch_value is None:
-                        # Look for epoch metric at the same step
-                        try:
-                            epoch_history = client.get_metric_history(
-                                run.info.run_id, "epoch"
+                    # Check if this is the overall best
+                    if best_value is None:
+                        best_value = run_best_metric.value
+                        best_step = run_best_metric.step
+                        best_epoch = run.data.metrics.get(
+                            "epoch", None
+                        )  # Try to get epoch from run metrics
+                        best_run_id = run.info.run_id
+                        best_run_name = run.data.tags.get(
+                            "mlflow.runName", run.info.run_id
+                        )
+                    else:
+                        if direction == "min" and run_best_metric.value < best_value:
+                            best_value = run_best_metric.value
+                            best_step = run_best_metric.step
+                            best_epoch = run.data.metrics.get("epoch", None)
+                            best_run_id = run.info.run_id
+                            best_run_name = run.data.tags.get(
+                                "mlflow.runName", run.info.run_id
                             )
-                            if epoch_history:
-                                valid_epochs = [
-                                    e
-                                    for e in epoch_history
-                                    if e.step <= best_metric.step
-                                ]
-                                if valid_epochs:
-                                    closest_epoch_metric = min(
-                                        valid_epochs,
-                                        key=lambda x: abs(x.step - best_metric.step),
-                                    )
-                                    epoch_value = closest_epoch_metric.value
-                        except Exception as e:
-                            epoch_value = None
-
-                    run_result[f"{metric_name}_epoch"] = epoch_value
+                        elif direction == "max" and run_best_metric.value > best_value:
+                            best_value = run_best_metric.value
+                            best_step = run_best_metric.step
+                            best_epoch = run.data.metrics.get("epoch", None)
+                            best_run_id = run.info.run_id
+                            best_run_name = run.data.tags.get(
+                                "mlflow.runName", run.info.run_id
+                            )
 
                 except Exception as e:
                     print(
                         f"    Warning: Error processing metric '{metric_name}' for run {run.info.run_id}: {e}"
                     )
-                    run_result[metric_name] = np.nan
-                    run_result[f"{metric_name}_step"] = np.nan
-                    run_result[f"{metric_name}_epoch"] = np.nan
+                    continue
 
-            results.append(run_result)
+            # Add result if we found a best value
+            if best_value is not None:
+                # Try to get epoch from the specific step if not available from run metrics
+                if best_epoch is None:
+                    print("Epoch is none, falling back to second approach.")
+                    # Look for epoch metric at the same step
+                    try:
+                        epoch_history = client.get_metric_history(best_run_id, "epoch")
+                        if epoch_history:
+                            # Filter to only epochs that occurred at or before our best step
+                            valid_epochs = [
+                                e for e in epoch_history if e.step <= best_step
+                            ]
+                            if valid_epochs:
+                                # Find epoch value closest to our best step (but not after it)
+                                closest_epoch_metric = min(
+                                    valid_epochs, key=lambda x: abs(x.step - best_step)
+                                )
+                                best_epoch = closest_epoch_metric.value
+                            else:
+                                print(
+                                    f"No epoch metrics found at or before step {best_step}"
+                                )
+                                best_epoch = None
+                    except Exception as e:
+                        print(f"Error retrieving epoch history: {e}")
+                        best_epoch = None
+
+                results.append(
+                    {
+                        "experiment_name": exp_name,
+                        "metric_name": metric_name,
+                        "optimization": direction,
+                        "best_value": best_value,
+                        "step": best_step,
+                        "epoch": best_epoch,
+                        "run_id": best_run_id,
+                        "run_name": best_run_name,
+                    }
+                )
+
+                print(
+                    f"    Best {direction}: {best_value:.6f} at step {best_step} (epoch {best_epoch}) from run {best_run_name}"
+                )
+            else:
+                print(
+                    f"    No data found for metric '{metric_name}' in experiment '{exp_name}'"
+                )
 
     # Create DataFrame
     if not results:
@@ -1290,31 +1316,21 @@ def find_best_metrics(
 
     # Apply aggregation mode
     if aggregation_mode == "best_run":
-        # For each metric, keep only the best run across all experiments
+        # Keep only the best run for each metric
         best_runs = []
+        for metric_name in df["metric_name"].unique():
+            metric_df = df[df["metric_name"] == metric_name]
+            for optimization in metric_df["optimization"].unique():
+                opt_df = metric_df[metric_df["optimization"] == optimization]
+                if optimization == "min":
+                    best_row = opt_df.loc[opt_df["best_value"].idxmin()]
+                else:  # max
+                    best_row = opt_df.loc[opt_df["best_value"].idxmax()]
+                best_runs.append(best_row)
+        df = pd.DataFrame(best_runs)
 
-        for metric_name in all_matched_metrics:
-            direction = metric_directions[metric_name]
-
-            # Filter out rows where this metric is NaN
-            metric_df = df[df[metric_name].notna()]
-
-            if len(metric_df) == 0:
-                continue
-
-            if direction == "min":
-                best_row = metric_df.loc[metric_df[metric_name].idxmin()]
-            else:  # max
-                best_row = metric_df.loc[metric_df[metric_name].idxmax()]
-
-            best_runs.append(best_row)
-
-        # If we have best runs, create a new DataFrame with unique runs
-        if best_runs:
-            df = pd.DataFrame(best_runs).drop_duplicates(subset=["run_id"])
-
-    # Sort by experiment name, then by run name
-    df = df.sort_values(["experiment_name", "run_name"])
+    # Sort by experiment name, then by metric name
+    df = df.sort_values(["experiment_name", "metric_name"])
 
     # Sort columns to move _epoch and _step columns to the end
     if not df.empty:

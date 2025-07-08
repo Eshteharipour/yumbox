@@ -238,7 +238,7 @@ def find_best_metrics_command(args):
     # Print summary statistics
     print(f"\nSummary:")
     print(f"- Total experiments processed: {df['experiment_name'].nunique()}")
-    # print(f"- Total metrics analyzed: {df['metric_name'].nunique()}")
+    print(f"- Total metrics analyzed: {df['metric_name'].nunique()}")
     print(f"- Total best values found: {len(df)}")
 
 
