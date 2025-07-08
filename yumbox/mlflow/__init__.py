@@ -1316,4 +1316,25 @@ def find_best_metrics(
     # Sort by experiment name, then by run name
     df = df.sort_values(["experiment_name", "run_name"])
 
+    # Sort columns to move _epoch and _step columns to the end
+    if not df.empty:
+        # Get all column names
+        all_columns = df.columns.tolist()
+
+        # Separate columns into regular and step/epoch columns
+        regular_columns = []
+        step_epoch_columns = []
+
+        for col in all_columns:
+            if col.endswith("_step") or col.endswith("_epoch"):
+                step_epoch_columns.append(col)
+            else:
+                regular_columns.append(col)
+
+        # Sort step/epoch columns for consistent ordering
+        step_epoch_columns.sort()
+
+        # Reorder DataFrame columns
+        df = df[regular_columns + step_epoch_columns]
+
     return df
