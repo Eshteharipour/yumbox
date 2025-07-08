@@ -15,6 +15,8 @@ from omegaconf import DictConfig, OmegaConf
 
 from yumbox.cache import BFG
 
+from .tools import flatten_json_columns
+
 DATE_TIME_FORMAT = "%Y-%m-%dT%H-%M-%S%z"
 
 
@@ -1054,6 +1056,57 @@ def plot_metric_across_experiments(
     cleanup_plots()
 
 
+def export_mlflow_data_with_flattening(
+    storage_path: str, output_file: str = "mlflow_all_experiments_runs.csv"
+):
+    """
+    Export MLflow data with JSON flattening - adapted from original code.
+
+    Args:
+        storage_path: Path to MLflow storage folder
+        output_file: Output CSV filename
+    """
+    # Set MLflow tracking URI
+    if storage_path.startswith("/"):
+        import mlflow
+
+        mlflow.set_tracking_uri(f"file:{storage_path}")
+    else:
+        main_file = Path(os.getcwd()).resolve()
+        mlflow_path = os.path.join(main_file, storage_path)
+        os.makedirs(mlflow_path, exist_ok=True)
+        import mlflow
+
+        mlflow.set_tracking_uri(f"file:{mlflow_path}")
+
+    client = mlflow.tracking.MlflowClient()
+    experiments = client.search_experiments()
+
+    all_runs_data = []
+
+    for experiment in experiments:
+        runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id])
+        if not runs.empty:
+            # Add experiment name to each run
+            runs["experiment_name"] = experiment.name
+            all_runs_data.append(runs)
+
+    if all_runs_data:
+        combined_runs = pd.concat(all_runs_data, ignore_index=True)
+
+        # Flatten JSON columns
+        combined_runs_flattened = flatten_json_columns(combined_runs)
+
+        combined_runs_flattened.to_csv(output_file, index=False)
+        print(
+            f"Data exported to {output_file} with {len(combined_runs_flattened)} runs"
+        )
+        return combined_runs_flattened
+    else:
+        print("No runs found")
+        return pd.DataFrame()
+
+
 def find_best_metrics(
     storage_path: str,
     experiment_names: list[str],
@@ -1065,296 +1118,164 @@ def find_best_metrics(
 ) -> pd.DataFrame:
     """
     Find the best values for specified metrics across experiments.
+    Uses only pandas, json, and python - no MLflow calls.
 
     Args:
-        storage_path: Path to MLflow storage folder
+        storage_path: Path to MLflow storage folder or CSV file
         experiment_names: List of experiment names to search (supports regex patterns)
         metrics: List of metric names to find best values for (supports regex patterns)
         min_or_max: List of 'min' or 'max' corresponding to each metric
         run_mode: Filter runs by 'parent', 'children', or 'both'
-        filter_string: Optional MLflow filter string
+        filter_string: Optional pandas query filter string
         aggregation_mode: 'all_runs' for current behavior, 'best_run' to keep only best run per metric
 
     Returns:
         pandas.DataFrame: Results with best values, steps, epochs, and run info
     """
-    from mlflow import MlflowClient
 
-    from yumbox.mlflow import get_mlflow_runs, set_tracking_uri
-
+    # Input validation
     if len(metrics) != len(min_or_max):
-        raise ValueError("metrics and min_or_max lists must have the same length")
+        raise ValueError("metrics and min_or_max must have the same length")
 
-    if not all(direction in ["min", "max"] for direction in min_or_max):
-        raise ValueError("min_or_max values must be either 'min' or 'max'")
+    for mode in min_or_max:
+        if mode not in ["min", "max"]:
+            raise ValueError("min_or_max values must be 'min' or 'max'")
 
-    # Set MLflow tracking URI
-    set_tracking_uri(storage_path)
-    client = MlflowClient()
+    # Load data
+    if storage_path.endswith(".csv"):
+        df = pd.read_csv(storage_path)
+    else:
+        # Export data first if storage_path is MLflow folder
+        df = export_mlflow_data_with_flattening(storage_path)
 
-    # Get all available experiments
-    all_experiments = client.search_experiments()
-
-    # Match experiment names using regex
-    matched_experiments = []
-    for exp_pattern in experiment_names:
-        if exp_pattern is None or exp_pattern == "none":
-            # Include all experiments
-            matched_experiments.extend([exp.name for exp in all_experiments])
-        else:
-            try:
-                regex_pattern = re.compile(exp_pattern)
-                matched_exp_names = [
-                    exp.name
-                    for exp in all_experiments
-                    if regex_pattern.search(exp.name)
-                ]
-                if matched_exp_names:
-                    matched_experiments.extend(matched_exp_names)
-                else:
-                    print(f"No experiments found matching pattern: {exp_pattern}")
-            except re.error as e:
-                print(f"Invalid regex pattern '{exp_pattern}': {e}")
-                continue
-
-    # Remove duplicates while preserving order
-    matched_experiments = list(dict.fromkeys(matched_experiments))
-
-    if not matched_experiments:
-        print("No experiments found matching the provided patterns")
+    if df.empty:
         return pd.DataFrame()
 
+    # Flatten JSON columns if not already done
+    df = flatten_json_columns(df)
+
+    # Filter by experiment names (supports regex)
+    if experiment_names:
+        exp_pattern = "|".join(experiment_names)
+        if "experiment_name" in df.columns:
+            df = df[
+                df["experiment_name"].str.contains(exp_pattern, regex=True, na=False)
+            ]
+        else:
+            print("Warning: 'experiment_name' column not found. Available columns:")
+            print(df.columns.tolist())
+            return pd.DataFrame()
+
+    # Filter by run mode
+    if run_mode == "parent":
+        # Parent runs don't have parentRunId
+        if "tags.mlflow.parentRunId" in df.columns:
+            df = df[df["tags.mlflow.parentRunId"].isna()]
+    elif run_mode == "children":
+        # Child runs have parentRunId
+        if "tags.mlflow.parentRunId" in df.columns:
+            df = df[df["tags.mlflow.parentRunId"].notna()]
+
+    # Apply custom filter
+    if filter_string:
+        try:
+            df = df.query(filter_string)
+        except Exception as e:
+            print(f"Warning: Filter string '{filter_string}' failed: {e}")
+
+    # Filter successful runs
+    if "status" in df.columns:
+        df = df[df["status"] == "FINISHED"]
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # Find matching metric columns (supports regex)
+    available_columns = df.columns.tolist()
     results = []
 
-    for exp_name in matched_experiments:
-        print(f"Processing experiment: {exp_name}")
+    for metric_pattern, optimization in zip(metrics, min_or_max):
+        # Find columns matching the metric pattern
+        matching_cols = [
+            col for col in available_columns if re.search(metric_pattern, col)
+        ]
 
-        # Get runs for this experiment
-        runs = get_mlflow_runs(
-            exp_name, status="success", level=None, filter=filter_string
-        )
-
-        if not runs:
-            print(f"No successful runs found for experiment '{exp_name}'")
+        if not matching_cols:
+            print(f"Warning: No columns found matching pattern '{metric_pattern}'")
             continue
 
-        # Apply run mode filtering
-        if run_mode == "children":
-            runs = [run for run in runs if "mlflow.parentRunId" in run.data.tags]
-        elif run_mode == "parent":
-            runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
+        for metric_col in matching_cols:
+            # Skip if metric column doesn't exist or is all NaN
+            if metric_col not in df.columns or df[metric_col].isna().all():
+                continue
 
-        if not runs:
-            print(
-                f"No runs found for experiment '{exp_name}' with run_mode '{run_mode}'"
-            )
-            continue
+            df_metric = df[df[metric_col].notna()].copy()
 
-        # Get all available metrics from runs to support regex matching
-        all_metrics_in_exp = set()
-        for run in runs:
-            all_metrics_in_exp.update(run.data.metrics.keys())
-            # Also get metric history keys
-            try:
-                for metric_key in run.data.metrics.keys():
-                    metric_history = client.get_metric_history(
-                        run.info.run_id, metric_key
-                    )
-                    if metric_history:
-                        all_metrics_in_exp.add(metric_key)
-            except:
-                pass
+            if df_metric.empty:
+                continue
 
-        # Match metrics using regex
-        matched_metrics = []
-        matched_directions = []
+            if aggregation_mode == "all_runs":
+                # Return all runs sorted by metric
+                ascending = optimization == "min"
+                df_sorted = df_metric.sort_values(by=metric_col, ascending=ascending)
 
-        for i, metric_pattern in enumerate(metrics):
-            if metric_pattern is None or metric_pattern == "none":
-                # Include all metrics
-                matched_metrics.extend(list(all_metrics_in_exp))
-                matched_directions.extend([min_or_max[i]] * len(all_metrics_in_exp))
-            else:
-                try:
-                    regex_pattern = re.compile(metric_pattern)
-                    matched_metric_names = [
-                        m for m in all_metrics_in_exp if regex_pattern.search(m)
-                    ]
-                    if matched_metric_names:
-                        matched_metrics.extend(matched_metric_names)
-                        matched_directions.extend(
-                            [min_or_max[i]] * len(matched_metric_names)
-                        )
-                    else:
-                        print(f"No metrics found matching pattern: {metric_pattern}")
-                except re.error as e:
-                    print(f"Invalid regex pattern '{metric_pattern}': {e}")
-                    continue
+                # Add metric info
+                df_sorted = df_sorted.copy()
+                df_sorted["target_metric"] = metric_col
+                df_sorted["optimization"] = optimization
+                df_sorted["metric_value"] = df_sorted[metric_col]
 
-        # Remove duplicates while preserving order
-        unique_metrics = []
-        unique_directions = []
-        seen = set()
-        for metric, direction in zip(matched_metrics, matched_directions):
-            if metric not in seen:
-                unique_metrics.append(metric)
-                unique_directions.append(direction)
-                seen.add(metric)
+                results.append(df_sorted)
 
-        # Process each metric
-        for metric_name, direction in zip(unique_metrics, unique_directions):
-            best_value = None
-            best_step = None
-            best_epoch = None
-            best_run_id = None
-            best_run_name = None
+            elif aggregation_mode == "best_run":
+                # Find best run for this metric
+                if optimization == "min":
+                    best_idx = df_metric[metric_col].idxmin()
+                else:
+                    best_idx = df_metric[metric_col].idxmax()
 
-            print(f"  Finding best {direction} for metric: {metric_name}")
+                best_run = df_metric.loc[[best_idx]].copy()
+                best_run["target_metric"] = metric_col
+                best_run["optimization"] = optimization
+                best_run["metric_value"] = best_run[metric_col]
 
-            for run in runs:
-                try:
-                    # Get metric history for this run
-                    metric_history = client.get_metric_history(
-                        run.info.run_id, metric_name
-                    )
+                results.append(best_run)
 
-                    if not metric_history:
-                        continue
-
-                    # Find best value in this run's history
-                    if direction == "min":
-                        run_best_metric = min(metric_history, key=lambda x: x.value)
-                    else:  # max
-                        run_best_metric = max(metric_history, key=lambda x: x.value)
-
-                    # Check if this is the overall best
-                    if best_value is None:
-                        best_value = run_best_metric.value
-                        best_step = run_best_metric.step
-                        best_epoch = run.data.metrics.get(
-                            "epoch", None
-                        )  # Try to get epoch from run metrics
-                        best_run_id = run.info.run_id
-                        best_run_name = run.data.tags.get(
-                            "mlflow.runName", run.info.run_id
-                        )
-                    else:
-                        if direction == "min" and run_best_metric.value < best_value:
-                            best_value = run_best_metric.value
-                            best_step = run_best_metric.step
-                            best_epoch = run.data.metrics.get("epoch", None)
-                            best_run_id = run.info.run_id
-                            best_run_name = run.data.tags.get(
-                                "mlflow.runName", run.info.run_id
-                            )
-                        elif direction == "max" and run_best_metric.value > best_value:
-                            best_value = run_best_metric.value
-                            best_step = run_best_metric.step
-                            best_epoch = run.data.metrics.get("epoch", None)
-                            best_run_id = run.info.run_id
-                            best_run_name = run.data.tags.get(
-                                "mlflow.runName", run.info.run_id
-                            )
-
-                except Exception as e:
-                    print(
-                        f"    Warning: Error processing metric '{metric_name}' for run {run.info.run_id}: {e}"
-                    )
-                    continue
-
-            # Add result if we found a best value
-            if best_value is not None:
-                # Try to get epoch from the specific step if not available from run metrics
-                if best_epoch is None:
-                    print("Epoch is none, falling back to second approach.")
-                    # Look for epoch metric at the same step
-                    try:
-                        epoch_history = client.get_metric_history(best_run_id, "epoch")
-                        if epoch_history:
-                            # Filter to only epochs that occurred at or before our best step
-                            valid_epochs = [
-                                e for e in epoch_history if e.step <= best_step
-                            ]
-                            if valid_epochs:
-                                # Find epoch value closest to our best step (but not after it)
-                                closest_epoch_metric = min(
-                                    valid_epochs, key=lambda x: abs(x.step - best_step)
-                                )
-                                best_epoch = closest_epoch_metric.value
-                            else:
-                                print(
-                                    f"No epoch metrics found at or before step {best_step}"
-                                )
-                                best_epoch = None
-                    except Exception as e:
-                        print(f"Error retrieving epoch history: {e}")
-                        best_epoch = None
-
-                results.append(
-                    {
-                        "experiment_name": exp_name,
-                        "metric_name": metric_name,
-                        "optimization": direction,
-                        "best_value": best_value,
-                        "step": best_step,
-                        "epoch": best_epoch,
-                        "run_id": best_run_id,
-                        "run_name": best_run_name,
-                    }
-                )
-
-                print(
-                    f"    Best {direction}: {best_value:.6f} at step {best_step} (epoch {best_epoch}) from run {best_run_name}"
-                )
-            else:
-                print(
-                    f"    No data found for metric '{metric_name}' in experiment '{exp_name}'"
-                )
-
-    # Create DataFrame
     if not results:
-        print("No results found for any metrics")
         return pd.DataFrame()
 
-    df = pd.DataFrame(results)
+    # Combine results
+    final_df = pd.concat(results, ignore_index=True)
 
-    # Apply aggregation mode
-    if aggregation_mode == "best_run":
-        # Keep only the best run for each metric
-        best_runs = []
-        for metric_name in df["metric_name"].unique():
-            metric_df = df[df["metric_name"] == metric_name]
-            for optimization in metric_df["optimization"].unique():
-                opt_df = metric_df[metric_df["optimization"] == optimization]
-                if optimization == "min":
-                    best_row = opt_df.loc[opt_df["best_value"].idxmin()]
-                else:  # max
-                    best_row = opt_df.loc[opt_df["best_value"].idxmax()]
-                best_runs.append(best_row)
-        df = pd.DataFrame(best_runs)
+    # Add useful columns if they exist
+    useful_cols = [
+        "experiment_name",
+        "run_id",
+        "status",
+        "start_time",
+        "end_time",
+        "tags.mlflow.runName",
+        "tags.mlflow.parentRunId",
+        "target_metric",
+        "optimization",
+        "metric_value",
+    ]
 
-    # Sort by experiment name, then by metric name
-    df = df.sort_values(["experiment_name", "metric_name"])
+    # Keep only existing columns
+    existing_useful_cols = [col for col in useful_cols if col in final_df.columns]
 
-    # Sort columns to move _epoch and _step columns to the end
-    if not df.empty:
-        # Get all column names
-        all_columns = df.columns.tolist()
+    # Keep metric columns and useful columns
+    metric_columns = [col for col in final_df.columns if col.startswith("metrics.")]
+    param_columns = [col for col in final_df.columns if col.startswith("params.")]
 
-        # Separate columns into regular and step/epoch columns
-        regular_columns = []
-        step_epoch_columns = []
+    columns_to_keep = existing_useful_cols + metric_columns + param_columns
+    columns_to_keep = list(
+        dict.fromkeys(columns_to_keep)
+    )  # Remove duplicates while preserving order
 
-        for col in all_columns:
-            if col.endswith("_step") or col.endswith("_epoch"):
-                step_epoch_columns.append(col)
-            else:
-                regular_columns.append(col)
+    # Filter columns that actually exist in the dataframe
+    columns_to_keep = [col for col in columns_to_keep if col in final_df.columns]
 
-        # Sort step/epoch columns for consistent ordering
-        step_epoch_columns.sort()
+    final_df = final_df[columns_to_keep]
 
-        # Reorder DataFrame columns
-        df = df[regular_columns + step_epoch_columns]
-
-    return df
+    return final_df
