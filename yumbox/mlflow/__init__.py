@@ -481,7 +481,7 @@ def plot_metric_across_runs(
         ax.set_title(f"{metric_key} across runs")
         ax.set_xlabel("Step")
         ax.set_ylabel(metric_key)
-        ax.legend()
+        ax.legend(fontsize=14)
         if artifact_file is None:
             artifact_file = f"{metric_key}_plot.png"
         mlflow.log_figure(fig, artifact_file)
@@ -498,15 +498,25 @@ def plot_metric_across_runs(
 def process_experiment_metrics(
     storage_path: Union[str, Path],
     select_metrics: list[str],
-    metrics_to_mean: list[str],
-    mean_metric_name: str,
     sort_metric: str,
+    legend_names: list[str],
+    y_metric: str,
+    metrics_to_mean: list[str] = [],
+    mean_metric_name: str = "mean",
     aggregate_all_runs: bool = False,
     run_mode: Literal["parent", "children", "both"] = "both",
     filter: Optional[str] = None,
+    plot_experiments: Optional[list[str]] = None,
+    plot_mode: Literal["step", "epoch"] = "epoch",
+    output_file: str = None,
+    plot_title: str = None,
+    figsize: tuple = (12, 8),
+    dpi: int = 300,
+    subsample_interval: int = 100,
+    marker_size: int = 6,
 ) -> pd.DataFrame:
     """
-    Process MLflow experiments to calculate mean metrics and sort results.
+    Process MLflow experiments to calculate mean metrics and sort results, with optional plotting.
 
     Args:
         storage_path: Path to MLflow storage folder
@@ -517,6 +527,16 @@ def process_experiment_metrics(
         aggregate_all_runs: If True, get all successful runs; if False, get last run
         run_mode: Filter runs by 'parent', 'children', or 'both'
         filter: Optional MLflow filter string (e.g., "params.dataset = 'lip'")
+
+        # New plotting parameters
+        plot_experiments: List of experiment names to include in plot (if None, uses all found experiments)
+        plot_mode: X-axis mode - "step" or "epoch"
+        save_plot: If True, saves plot as artifact
+        plot_title: Custom title for the plot
+        figsize: Figure size in inches (width, height)
+        dpi: DPI for high-quality output
+        subsample_interval: Subsample 1 point every N steps to reduce density
+        marker_size: Size of markers on the plot
 
     Returns:
         pandas.DataFrame: Processed metrics with mean and sorted results
@@ -537,6 +557,7 @@ def process_experiment_metrics(
         return pd.DataFrame()
 
     results = []
+    experiment_names = []  # Track experiment names for plotting
 
     for exp in experiments:
         # Get runs based on mode and filter
@@ -567,6 +588,8 @@ def process_experiment_metrics(
         if not runs:
             print(f"No runs found for experiment {exp.name} with run_mode {run_mode}")
             continue
+
+        experiment_names.append(exp.name)  # Track experiment name
 
         for run in runs:
             run_metrics = {}
@@ -609,12 +632,287 @@ def process_experiment_metrics(
         return pd.DataFrame()
 
     df = pd.DataFrame(results)
-    if sort_metric in df.columns:
+    if sort_metric and sort_metric in df.columns:
         df = df.sort_values(by=sort_metric, ascending=False)
     else:
         print(f"WARNING: sort metric {sort_metric} not valid.")
 
+    # Generate plots if requested
+    plot_experiments_list = plot_experiments if plot_experiments else experiment_names
+
+    # Create multi-metric plot
+    plot_multiple_metrics_across_experiments(
+        experiment_names=plot_experiments_list,
+        metric_keys=select_metrics,
+        mode=plot_mode,
+        artifact_file=output_file,
+        title=plot_title,
+        figsize=figsize,
+        dpi=dpi,
+        subsample_interval=subsample_interval,
+        marker_size=marker_size,
+        legend_names=legend_names,
+        y_metric=y_metric,
+    )
+
     return df
+
+
+def plot_multiple_metrics_across_experiments(
+    experiment_names: list[str],
+    metric_keys: list[str],
+    y_metric: str,
+    legend_names: list[str] = None,
+    mode: Literal["step", "epoch"] = "epoch",
+    artifact_file: str = None,
+    title: str = None,
+    figsize: tuple = (12, 8),
+    dpi: int = 300,
+    subsample_interval: int = 100,
+    marker_size: int = 6,
+) -> None:
+    """
+    Plots multiple metrics across multiple MLflow experiments on the same plot.
+
+    Parameters:
+    - experiment_names (list[str]): List of experiment names to compare
+    - metric_keys (list[str]): List of metrics to plot (e.g., ['f1-binary', 'f1-weighted'])
+    - mode (str): X-axis mode - "step" or "epoch"
+    - legend_names (list[str], optional): Custom names for legend
+    - artifact_file (str, optional): File name to save the plot
+    - title (str, optional): Custom title for the plot
+    - figsize (tuple): Figure size in inches (width, height)
+    - dpi (int): DPI for high-quality output
+    - subsample_interval (int): Subsample 1 point every N steps to reduce density
+    - marker_size (int): Size of markers on the plot
+    """
+
+    # Validate legend_names if provided
+    if legend_names is not None:
+        if len(legend_names) != len(experiment_names) * len(metric_keys):
+            raise ValueError(
+                f"legend_names length ({len(legend_names)}) must match experiment_names length ({len(experiment_names)})"
+            )
+    else:
+        legend_names = experiment_names
+
+    import matplotlib.lines as mlines
+    import matplotlib.pyplot as plt
+
+    client = MlflowClient()
+
+    # Print-friendly line styles and colors
+    line_styles = ["-", "--", "-.", ":"]
+    markers = ["o", "s", "^", "D", "v", "<", ">", "p", "*", "h"]
+    colors = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+    legend_elements = []
+    plot_data_found = False
+
+    # Create style combinations for each metric-experiment pair
+    style_combinations = []
+    for i, metric in enumerate(metric_keys):
+        legend_name = legend_names[i]  # Get corresponding legend name
+        for j, exp_name in enumerate(experiment_names):
+            style_combinations.append(
+                {
+                    "metric": metric,
+                    "experiment": exp_name,
+                    "color": colors[i % len(colors)],
+                    "linestyle": line_styles[j % len(line_styles)],
+                    "marker": markers[(i * len(experiment_names) + j) % len(markers)],
+                    "legend_name": legend_name,
+                }
+            )
+
+    for combo in style_combinations:
+        metric_key = combo["metric"]
+        exp_name = combo["experiment"]
+        legend_name = combo["legend_name"]
+
+        # Get experiment by name
+        try:
+            experiment = client.get_experiment_by_name(exp_name)
+            if not experiment:
+                print(f"Experiment '{exp_name}' not found")
+                continue
+        except Exception as e:
+            print(f"Error getting experiment '{exp_name}': {e}")
+            continue
+
+        # Get all successful runs
+        try:
+            runs = client.search_runs(
+                experiment_ids=[experiment.experiment_id],
+                filter_string="status = 'FINISHED'",
+                run_view_type=entities.ViewType.ACTIVE_ONLY,
+                order_by=["start_time DESC"],
+            )
+
+            # Filter for parent runs only
+            runs = [run for run in runs if "mlflow.parentRunId" not in run.data.tags]
+
+            if not runs:
+                print(f"No successful runs found for experiment '{exp_name}'")
+                continue
+
+            # Reverse to get oldest to newest
+            runs = runs[::-1]
+        except Exception as e:
+            print(f"Error getting runs for experiment '{exp_name}': {e}")
+            continue
+
+        # Collect data for this metric-experiment combination
+        all_x_values = []
+        all_y_values = []
+        runs_plotted = 0
+
+        for run in runs:
+            try:
+                # Get metric history
+                metrics = client.get_metric_history(run.info.run_id, metric_key)
+                if not metrics:
+                    continue
+
+                # Sort metrics by step
+                metrics = sorted(metrics, key=lambda m: m.step)
+
+                # Extract x and y values
+                x_values = [m.step for m in metrics]
+                y_values = [m.value for m in metrics]
+
+                # Subsample if needed
+                if len(x_values) > subsample_interval:
+                    indices = [0]  # Keep first point
+                    for idx in range(
+                        subsample_interval, len(x_values) - 1, subsample_interval
+                    ):
+                        indices.append(idx)
+                    if len(x_values) - 1 not in indices:
+                        indices.append(len(x_values) - 1)  # Keep last point
+
+                    x_values = [x_values[idx] for idx in indices]
+                    y_values = [y_values[idx] for idx in indices]
+
+                all_x_values.extend(x_values)
+                all_y_values.extend(y_values)
+                runs_plotted += 1
+
+            except Exception as e:
+                print(f"Error processing run {run.info.run_id}: {e}")
+                continue
+
+        # Plot if we have data
+        if all_x_values and all_y_values:
+            # Convert to epochs if requested
+            if mode.lower() == "epoch":
+                # Simple conversion: assume steps are roughly evenly distributed across epochs
+                max_step = max(all_x_values)
+                all_x_values = [x / max_step * runs_plotted for x in all_x_values]
+                x_label = "Epoch"
+            else:
+                x_label = "Step"
+
+            # Sort by x-values
+            combined_data = list(zip(all_x_values, all_y_values))
+            combined_data.sort(key=lambda x: x[0])
+            sorted_x, sorted_y = zip(*combined_data)
+
+            # Plot the line
+            ax.plot(
+                sorted_x,
+                sorted_y,
+                linestyle=combo["linestyle"],
+                marker=combo["marker"],
+                color=combo["color"],
+                markersize=marker_size,
+                linewidth=2.0,
+                alpha=0.8,
+                label=f"{legend_name.title()} ({runs_plotted} runs)",
+                markerfacecolor="white",
+                markeredgecolor=combo["color"],
+                markeredgewidth=6.0,
+            )
+
+            # Add to legend
+            legend_elements.append(
+                mlines.Line2D(
+                    [],
+                    [],
+                    color=combo["color"],
+                    linestyle=combo["linestyle"],
+                    marker=combo["marker"],
+                    markersize=marker_size,
+                    markerfacecolor="white",
+                    markeredgecolor=combo["color"],
+                    linewidth=2.0,
+                    markeredgewidth=6.0,  # marker legend size
+                    # label=f"{metric_key} ({exp_name})",
+                    label=f"{legend_name.title()} ({runs_plotted} runs)",
+                )
+            )
+
+            plot_data_found = True
+
+    if not plot_data_found:
+        print("No data found for any metric-experiment combination")
+        plt.close(fig)
+        return
+
+    # Configure plot
+    ax.set_xlabel(x_label, fontsize=12, fontweight="bold")
+    ax.set_ylabel(y_metric.replace("_", " ").title(), fontsize=12, fontweight="bold")
+
+    if title:
+        ax.set_title(title, fontsize=14, fontweight="bold", pad=20)
+    else:
+        metric_names = ", ".join(metric_keys)
+        ax.set_title(
+            f"Metrics Comparison: {metric_names}",
+            fontsize=14,
+            fontweight="bold",
+            pad=20,
+        )
+
+    # Enhanced legend
+    ax.legend(
+        handles=legend_elements,
+        loc="best",
+        frameon=True,
+        fancybox=True,
+        shadow=True,
+        fontsize=14,
+        framealpha=0.9,
+    )
+
+    # Grid for better readability
+    ax.grid(True, alpha=0.3, linestyle="-", linewidth=0.5)
+
+    # Improve layout
+    plt.tight_layout()
+
+    # Save or show plot
+    if artifact_file:
+        plt.savefig(artifact_file, dpi=dpi, bbox_inches="tight")
+        print(f"Plot saved as: {artifact_file}")
+    else:
+        plt.show()
+
+    plt.close(fig)
 
 
 def visualize_metrics(
@@ -732,6 +1030,7 @@ def cleanup_plots():
 def plot_metric_across_experiments(
     experiment_names: list[str],
     metric_key: str,
+    y_metric: Optional[str] = None,
     mode: Literal["step", "epoch"] = "epoch",
     legend_names: list[str] = None,
     artifact_file: str = None,
@@ -773,6 +1072,9 @@ def plot_metric_across_experiments(
 
     logger = BFG["logger"]
     client = MlflowClient()
+
+    if y_metric is None:
+        y_metric = metric_key
 
     # Validate legend_names if provided
     if legend_names is not None:
@@ -912,7 +1214,7 @@ def plot_metric_across_experiments(
                     markersize=marker_size,
                     linewidth=2.0,
                     alpha=0.8,
-                    label=f"{legend_name} ({runs_plotted} runs)",
+                    label=f"{legend_name.title()} ({runs_plotted} runs)",
                     markerfacecolor="white",
                     markeredgecolor=current_color,
                     markeredgewidth=6.0,
@@ -1004,7 +1306,7 @@ def plot_metric_across_experiments(
                     markeredgecolor=current_color,
                     linewidth=2.0,
                     markeredgewidth=6.0,
-                    label=f"{legend_name} ({runs_plotted} runs)",
+                    label=f"{legend_name.title()} ({runs_plotted} runs)",
                 )
             )
 
@@ -1015,7 +1317,7 @@ def plot_metric_across_experiments(
 
     # Configure plot for print quality
     ax.set_xlabel(x_label, fontsize=12, fontweight="bold")
-    ax.set_ylabel(metric_key.replace("_", " ").title(), fontsize=12, fontweight="bold")
+    ax.set_ylabel(y_metric.replace("_", " ").title(), fontsize=12, fontweight="bold")
 
     if title:
         ax.set_title(title, fontsize=14, fontweight="bold", pad=20)
@@ -1034,7 +1336,7 @@ def plot_metric_across_experiments(
         frameon=True,
         fancybox=True,
         shadow=True,
-        fontsize=10,
+        fontsize=14,
         framealpha=0.9,
     )
 

@@ -19,6 +19,11 @@ def analyze_metrics(args):
         aggregate_all_runs=args.aggregate_all_runs,
         run_mode=args.run_mode,
         filter=args.filter,
+        output_file=args.output_plot,
+        plot_experiments=args.experiment_names,
+        legend_names=args.legend_names,
+        plot_title=args.title,
+        y_metric=args.y_metric,
     )
 
     if df.empty:
@@ -51,15 +56,15 @@ def analyze_metrics(args):
         print(f"Processed metrics saved to {args.output_csv}")
 
     # Run visualize_metrics with optional file output
-    visualize_metrics(
-        df=df,
-        x_metric=args.x_metric,
-        y_metric=args.y_metric,
-        color_metric=args.color_metric,
-        title=args.title,
-        theme=args.theme,
-        output_file=args.output_plot,
-    )
+    # visualize_metrics(
+    #     df=df,
+    #     x_metric=args.x_metric,
+    #     y_metric=args.y_metric,
+    #     color_metric=args.color_metric,
+    #     title=args.title,
+    #     theme=args.theme,
+    #     output_file=args.output_plot,
+    # )
 
 
 def compare_experiments(args):
@@ -77,6 +82,7 @@ def compare_experiments(args):
         title=args.title,
         figsize=tuple(args.figsize) if args.figsize else (10, 6),
         dpi=args.dpi,
+        y_metric=args.y_metric,
     )
 
     print(f"Experiment comparison plot generated for metric '{args.metric}'")
@@ -334,19 +340,20 @@ def main():
         "--metrics-to-mean",
         type=str,
         nargs="+",
-        required=True,
+        # required=True,
+        default=[],
         help="Space-separated list of metric names to calculate the mean for (e.g., 'acc loss'). Must be a subset of select-metrics.",
     )
     analyze_parser.add_argument(
         "--mean-metric-name",
         type=str,
-        required=True,
+        # required=True,
         help="Name for the calculated mean metric (e.g., 'avg_score').",
     )
     analyze_parser.add_argument(
         "--sort-metric",
         type=str,
-        required=True,
+        # required=True,
         help="Metric to sort the results by (e.g., 'acc'). Must be one of select-metrics or mean-metric-name.",
     )
     analyze_parser.add_argument(
@@ -404,6 +411,19 @@ def main():
         type=str,
         default="plotly_dark",
         help="Plotly theme for the visualization (e.g., 'plotly', 'plotly_dark', 'plotly_white'). Default: 'plotly_dark'.",
+    )
+    analyze_parser.add_argument(
+        "--experiment-names",
+        type=str,
+        nargs="+",
+        required=True,
+        help="Space-separated list of experiment names to compare (e.g., 'exp1' 'exp2' 'exp3').",
+    )
+    analyze_parser.add_argument(
+        "--legend-names",
+        type=str,
+        nargs="+",
+        help="Space-separated list of custom names for legend in same order as experiment-names (e.g., 'Baseline' 'Method A' 'Method B'). Optional.",
     )
 
     # Subparser for compare-experiments
@@ -465,6 +485,11 @@ def main():
         type=int,
         default=300,
         help="DPI for high-quality output suitable for printing. Default: 300.",
+    )
+    compare_parser.add_argument(
+        "--y-metric",
+        type=str,
+        help="Metric to use for the y-axis in the visualization (e.g., 'loss'). Must be in the processed metrics.",
     )
 
     # Subparser for manage-checkpoints
