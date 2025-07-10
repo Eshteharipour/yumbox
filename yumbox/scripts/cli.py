@@ -386,13 +386,13 @@ def main():
     analyze_parser.add_argument(
         "--x-metric",
         type=str,
-        required=True,
+        # required=True,
         help="Metric to use for the x-axis in the visualization (e.g., 'acc'). Must be in the processed metrics.",
     )
     analyze_parser.add_argument(
         "--y-metric",
         type=str,
-        required=True,
+        # required=True,
         help="Metric to use for the y-axis in the visualization (e.g., 'loss'). Must be in the processed metrics.",
     )
     analyze_parser.add_argument(
@@ -416,7 +416,7 @@ def main():
         "--experiment-names",
         type=str,
         nargs="+",
-        required=True,
+        # required=True,
         help="Space-separated list of experiment names to compare (e.g., 'exp1' 'exp2' 'exp3').",
     )
     analyze_parser.add_argument(

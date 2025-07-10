@@ -641,19 +641,20 @@ def process_experiment_metrics(
     plot_experiments_list = plot_experiments if plot_experiments else experiment_names
 
     # Create multi-metric plot
-    plot_multiple_metrics_across_experiments(
-        experiment_names=plot_experiments_list,
-        metric_keys=select_metrics,
-        mode=plot_mode,
-        artifact_file=output_file,
-        title=plot_title,
-        figsize=figsize,
-        dpi=dpi,
-        subsample_interval=subsample_interval,
-        marker_size=marker_size,
-        legend_names=legend_names,
-        y_metric=y_metric,
-    )
+    if output_file:
+        plot_multiple_metrics_across_experiments(
+            experiment_names=plot_experiments_list,
+            metric_keys=select_metrics,
+            mode=plot_mode,
+            artifact_file=output_file,
+            title=plot_title,
+            figsize=figsize,
+            dpi=dpi,
+            subsample_interval=subsample_interval,
+            marker_size=marker_size,
+            legend_names=legend_names,
+            y_metric=y_metric,
+        )
 
     return df
 
