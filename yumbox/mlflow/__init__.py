@@ -514,6 +514,7 @@ def process_experiment_metrics(
     dpi: int = 300,
     subsample_interval: int = 100,
     marker_size: int = 6,
+    include_params: Optional[list[str]] = None,
 ) -> pd.DataFrame:
     """
     Process MLflow experiments to calculate mean metrics and sort results, with optional plotting.
@@ -527,8 +528,10 @@ def process_experiment_metrics(
         aggregate_all_runs: If True, get all successful runs; if False, get last run
         run_mode: Filter runs by 'parent', 'children', or 'both'
         filter: Optional MLflow filter string (e.g., "params.dataset = 'lip'")
+        include_params: Optional list of parameter names to include in the output DataFrame
+                       (e.g., ["dataset", "learning_rate", "batch_size"])
 
-        # New plotting parameters
+        # Plotting parameters
         plot_experiments: List of experiment names to include in plot (if None, uses all found experiments)
         plot_mode: X-axis mode - "step" or "epoch"
         save_plot: If True, saves plot as artifact
@@ -539,7 +542,7 @@ def process_experiment_metrics(
         marker_size: Size of markers on the plot
 
     Returns:
-        pandas.DataFrame: Processed metrics with mean and sorted results
+        pandas.DataFrame: Processed metrics with mean and sorted results, optionally including specified parameters
     """
     if run_mode not in ["parent", "children", "both"]:
         raise ValueError(
@@ -624,6 +627,19 @@ def process_experiment_metrics(
             # Add experiment and run info
             run_metrics["experiment_name"] = exp.name
             run_metrics["run_id"] = run.info.run_id
+
+            # Add requested parameters if specified
+            if include_params:
+                for param_name in include_params:
+                    param_value = run.data.params.get(param_name, None)
+                    run_metrics[f"param_{param_name}"] = param_value
+                    if param_value is None:
+                        print(
+                            f"WARNING: parameter {param_name} missing "
+                            f"for run with id {run.info.run_id} and name {run.info.run_name} "
+                            f"of experiment with id {exp.experiment_id} name {exp.name}"
+                        )
+
             results.append(run_metrics)
 
     # Create DataFrame and sort

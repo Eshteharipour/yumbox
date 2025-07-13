@@ -24,6 +24,7 @@ def analyze_metrics(args):
         legend_names=args.legend_names,
         plot_title=args.title,
         y_metric=args.y_metric,
+        include_params=args.include_params,
     )
 
     if df.empty:
@@ -424,6 +425,12 @@ def main():
         type=str,
         nargs="+",
         help="Space-separated list of custom names for legend in same order as experiment-names (e.g., 'Baseline' 'Method A' 'Method B'). Optional.",
+    )
+    analyze_parser.add_argument(
+        "--include-params",
+        type=str,
+        nargs="+",
+        help="Space-separated list of parameters names to include in the output table.",
     )
 
     # Subparser for compare-experiments
