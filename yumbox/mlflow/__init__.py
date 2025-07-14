@@ -506,7 +506,7 @@ def process_experiment_metrics(
     aggregate_all_runs: bool = False,
     run_mode: Literal["parent", "children", "both"] = "both",
     filter: Optional[str] = None,
-    plot_experiments: Optional[list[str]] = None,
+    experiment_names: Optional[list[str]] = None,
     plot_mode: Literal["step", "epoch"] = "epoch",
     output_file: str = None,
     plot_title: str = None,
@@ -528,11 +528,11 @@ def process_experiment_metrics(
         aggregate_all_runs: If True, get all successful runs; if False, get last run
         run_mode: Filter runs by 'parent', 'children', or 'both'
         filter: Optional MLflow filter string (e.g., "params.dataset = 'lip'")
+        experiment_names: List of experiment names to include in both DataFrame and plot (if None, uses all found experiments)
         include_params: Optional list of parameter names to include in the output DataFrame
                        (e.g., ["dataset", "learning_rate", "batch_size"])
 
         # Plotting parameters
-        plot_experiments: List of experiment names to include in plot (if None, uses all found experiments)
         plot_mode: X-axis mode - "step" or "epoch"
         save_plot: If True, saves plot as artifact
         plot_title: Custom title for the plot
@@ -559,8 +559,15 @@ def process_experiment_metrics(
         print("No active experiments found")
         return pd.DataFrame()
 
+    # Filter experiments by name if specified
+    if experiment_names:
+        experiments = [exp for exp in experiments if exp.name in experiment_names]
+        if not experiments:
+            print(f"No experiments found with names: {experiment_names}")
+            return pd.DataFrame()
+
     results = []
-    experiment_names = []  # Track experiment names for plotting
+    processed_experiment_names = []  # Track experiment names for plotting
 
     for exp in experiments:
         # Get runs based on mode and filter
@@ -592,7 +599,7 @@ def process_experiment_metrics(
             print(f"No runs found for experiment {exp.name} with run_mode {run_mode}")
             continue
 
-        experiment_names.append(exp.name)  # Track experiment name
+        processed_experiment_names.append(exp.name)  # Track experiment name
 
         for run in runs:
             run_metrics = {}
@@ -654,7 +661,7 @@ def process_experiment_metrics(
         print(f"WARNING: sort metric {sort_metric} not valid.")
 
     # Generate plots if requested
-    plot_experiments_list = plot_experiments if plot_experiments else experiment_names
+    plot_experiments_list = processed_experiment_names
 
     # Create multi-metric plot
     if output_file:

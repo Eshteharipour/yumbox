@@ -20,7 +20,7 @@ def analyze_metrics(args):
         run_mode=args.run_mode,
         filter=args.filter,
         output_file=args.output_plot,
-        plot_experiments=args.experiment_names,
+        experiment_names=args.experiment_names,
         legend_names=args.legend_names,
         plot_title=args.title,
         y_metric=args.y_metric,
