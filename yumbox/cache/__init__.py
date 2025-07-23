@@ -443,6 +443,13 @@ def np_cache_kwargs_list_hash(func):
         logger = BFG["logger"]
 
         func_name = func.__name__
+
+        if "cache_kwargs" not in kwargs or not kwargs["cache_kwargs"]:
+            logger.warning(
+                f"Skipped loaing cache becaise kwargs was empty for {func_name}"
+            )
+            return func(*args, **kwargs, cache=None, cache_file=None)
+
         cache_dict = {}
         for c in kwargs["cache_kwargs"]:
             cache_dict[c] = kwargs[c]
