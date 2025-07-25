@@ -259,7 +259,7 @@ def np_cache(func):
 
 def np_cache_lazy(func):
     @functools.wraps(func)
-    def wrapper(*args, keys: list[str] | None = None, **kwargs):
+    def wrapper(*args, **kwargs):
         cache_dir = BFG["cache_dir"]
         logger = BFG["logger"]
 
@@ -267,7 +267,8 @@ def np_cache_lazy(func):
         cache_file = os.path.join(cache_dir, f"{func_name}.npz") if cache_dir else ""
 
         # Initialize features if not provided
-        features = kwargs.get("features", {})
+        res = {}
+        keys = kwargs.get("keys", {})
 
         # Load cache (partially or fully based on keys)
         if cache_dir and os.path.isfile(cache_file):
@@ -278,7 +279,7 @@ def np_cache_lazy(func):
                     cached_keys = cache_data["keys"]
                     cached_values = cache_data["values"]
                     # If keys are specified, load only those; otherwise, load all
-                    if keys is not None:
+                    if keys:
                         # Find indices of requested keys
                         key_indices = [
                             i for i, k in enumerate(cached_keys) if k in keys
@@ -286,10 +287,10 @@ def np_cache_lazy(func):
                         if key_indices:
                             selected_keys = [cached_keys[i] for i in key_indices]
                             selected_values = [cached_values[i] for i in key_indices]
-                            features.update(dict(zip(selected_keys, selected_values)))
+                            res.update(dict(zip(selected_keys, selected_values)))
                     else:
                         # Load all keys if none specified
-                        features.update(dict(zip(cached_keys, cached_values)))
+                        res.update(dict(zip(cached_keys, cached_values)))
                 logger.info(f"Loaded cache for {func_name} from {cache_file}")
             except Exception as e:
                 logger.error(f"Failed to load cache: {e}")
@@ -298,8 +299,7 @@ def np_cache_lazy(func):
             cache_data = None
 
         # Call the original function with updated features
-        kwargs["features"] = features
-        res = func(*args, **kwargs)
+        res = func(*args, **kwargs, cache=res, cache_file=cache_file)
 
         # Save cache (including all keys, even those not used in this run)
         if cache_dir:
