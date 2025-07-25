@@ -144,6 +144,56 @@ def partial_featdict(
     return {x: feats[x] for x in df[colname].values if notfona(x)}
 
 
+def mult_feats(
+    df: pd.DataFrame,
+    feats_a: dict[str, np.ndarray],
+    feats_b: dict[str, np.ndarray],
+    colname_a: str,
+    colname_b: str,
+    normalize: Literal["before", "after", None] = None,
+) -> np.ndarray:
+    # colname_a is id col for feats_a
+    # colname_b is id col for feats_b
+    # allows missing value on either col a or col b
+    if normalize == None or normalize == "after":
+        x = np.array(
+            [
+                (
+                    feats_a[r[colname_a]] * feats_b[r[colname_b]]
+                    if (notfona(r[colname_a]) and notfona(r[colname_b]))
+                    else (
+                        feats_a[r[colname_a]]
+                        if (notfona(r[colname_a]))
+                        else feats_b[r[colname_b]]
+                    )
+                )
+                for _, r in df.iterrows()
+            ]
+        )
+        if normalize == None:
+            return x
+        else:
+            return normalize_vector(x)
+    elif normalize == "before":
+        return np.array(
+            [
+                (
+                    normalize_vector(feats_a[r[colname_a]])
+                    * normalize_vector(feats_b[r[colname_b]])
+                    if (notfona(r[colname_a]) and notfona(r[colname_b]))
+                    else (
+                        normalize_vector(feats_a[r[colname_a]])
+                        if (notfona(r[colname_a]))
+                        else normalize_vector(feats_b[r[colname_b]])
+                    )
+                )
+                for _, r in df.iterrows()
+            ]
+        )
+    else:
+        raise ValueError(normalize)
+
+
 def sum_feats(
     df: pd.DataFrame,
     feats_a: dict[str, np.ndarray],
@@ -192,6 +242,32 @@ def sum_feats(
         )
     else:
         raise ValueError(normalize)
+
+
+def diff_feats(
+    df: pd.DataFrame,
+    feats_a: dict[str, np.ndarray],
+    feats_b: dict[str, np.ndarray],
+    colname_a: str,
+    colname_b: str,
+) -> np.ndarray:
+    # colname_a is id col for feats_a
+    # colname_b is id col for feats_b
+    # allows missing value on either col a or col b
+    return np.array(
+        [
+            (
+                np.abs(feats_a[r[colname_a]] - feats_b[r[colname_b]])
+                if (notfona(r[colname_a]) and notfona(r[colname_b]))
+                else (
+                    feats_a[r[colname_a]]
+                    if (notfona(r[colname_a]))
+                    else feats_b[r[colname_b]]
+                )
+            )
+            for _, r in df.iterrows()
+        ]
+    )
 
 
 def cat_feats(
