@@ -1,5 +1,7 @@
 import base64
 import functools
+import hashlib
+import json
 import os
 
 import h5py
@@ -8,7 +10,7 @@ import numpy as np
 from yumbox.config import BFG
 
 
-def _encode_key(key):
+def encode_key(key):
     """Encode a key to be HDF5-safe using base64."""
     if isinstance(key, str):
         key = key.encode("utf-8")
@@ -18,7 +20,7 @@ def _encode_key(key):
     return base64.b64encode(key).decode("ascii")
 
 
-def _decode_key(encoded_key):
+def decode_key(encoded_key):
     """Decode a base64-encoded key back to original bytes."""
     return base64.b64decode(encoded_key.encode("ascii"))
 
@@ -43,12 +45,12 @@ def hd5_cache(func):
                     # If keys are specified, load only those
                     if keys:
                         for key in keys:
-                            encoded_key = _encode_key(key)
+                            encoded_key = encode_key(key)
                             if encoded_key in f:
                                 cache[key] = np.array(f[encoded_key])
                     else:
                         for key in f.keys():
-                            decoded_key = _decode_key(key)
+                            decoded_key = decode_key(key)
                             cache[decoded_key] = np.array(f[key])
                 logger.info(f"Loaded cache for {func_name} from {cache_file}")
             except Exception as e:
@@ -63,13 +65,85 @@ def hd5_cache(func):
             try:
                 with h5py.File(cache_file, "a") as f:  # 'a': preserve previous content
                     for key, value in result.items():
-                        encoded_key = _encode_key(key)
+                        encoded_key = encode_key(key)
 
                         if encoded_key in f:
                             del f[encoded_key]
 
                         f.create_dataset(encoded_key, data=value, compression="gzip")
 
+                logger.info(f"Saved cache for {func_name} to {cache_file}")
+            except Exception as e:
+                logger.error(f"Failed to save cache: {e}")
+
+        return result
+
+    return wrapper
+
+
+def hd5_cache_kwargs_list_hash(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+
+        if "cache_kwargs" not in kwargs or not kwargs["cache_kwargs"]:
+            logger.warning(
+                f"Skipped loading cache because kwargs was empty for {func_name}"
+            )
+            return func(*args, **kwargs, cache=None, cache_file=None)
+
+        cache_dict = {}
+        for c in kwargs["cache_kwargs"]:
+            cache_dict[c] = kwargs[c]
+
+        func_kwargs_hash = hashlib.md5(
+            json.dumps(cache_dict, sort_keys=True, default=str).encode()
+        ).hexdigest()
+
+        cache_file = (
+            os.path.join(cache_dir, f"{func_name}_{func_kwargs_hash}.h5")
+            if cache_dir
+            else None
+        )
+
+        cache = {}
+        keys = kwargs.get("keys", [])
+        keys = list(keys)
+
+        if cache_file and os.path.isfile(cache_file):
+            logger.info(f"Loading cache for {func_name} from {cache_file}")
+            try:
+                with h5py.File(cache_file, "r") as f:
+                    # If keys are specified, load only those
+                    if keys:
+                        for key in keys:
+                            encoded_key = encode_key(key)
+                            if encoded_key in f:
+                                cache[key] = np.array(f[encoded_key])
+                    else:
+                        for key in f.keys():
+                            decoded_key = decode_key(key)
+                            cache[decoded_key] = np.array(f[key])
+                logger.info(f"Loaded cache for {func_name} from {cache_file}")
+            except Exception as e:
+                logger.error(f"Failed to load cache: {e}")
+                cache = {}
+
+        cache = dict(keys=cache.keys(), values=cache.values())
+        result = func(*args, **kwargs, cache=cache, cache_file=cache_file)
+
+        if cache_file:
+            logger.info(f"Saving cache for {func_name} to {cache_file}")
+            try:
+                with h5py.File(cache_file, "a") as f:  # 'a': preserve previous content
+                    for key, value in result.items():
+                        encoded_key = encode_key(key)
+                        if encoded_key in f:
+                            del f[encoded_key]
+                        f.create_dataset(encoded_key, data=value, compression="gzip")
                 logger.info(f"Saved cache for {func_name} to {cache_file}")
             except Exception as e:
                 logger.error(f"Failed to save cache: {e}")
