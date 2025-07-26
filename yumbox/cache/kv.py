@@ -476,6 +476,21 @@ class VectorLMDB:
             consumed, added = cursor.putmulti(serialized_items)
             return added
 
+    def bulk_get(self, keys: list[str]) -> dict[str, np.ndarray]:
+        """# NO PERFORMANCE DIFFERENCE
+        Bulk get multiple arrays by keys.
+        :param keys: List of string keys to retrieve
+        :return: Dictionary of {key: array} for found keys (missing keys are omitted)
+        """
+        result = {}
+        with self.env.begin() as txn:
+            for key in keys:
+                key_bytes = key.encode()
+                data_bytes = txn.get(key_bytes)
+                if data_bytes is not None:
+                    result[key] = self._deserialize_array(data_bytes)
+        return result
+
 
 def lmdb_cache(func):
     @functools.wraps(func)
