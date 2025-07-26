@@ -40,22 +40,18 @@ def hd5_cache(func):
 
         if cache_file and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_file}")
-            try:
-                with h5py.File(cache_file, "r") as f:
-                    # If keys are specified, load only those
-                    if keys:
-                        for key in keys:
-                            encoded_key = encode_key(key)
-                            if encoded_key in f:
-                                cache[key] = np.array(f[encoded_key])
-                    else:
-                        for key in f.keys():
-                            decoded_key = decode_key(key)
-                            cache[decoded_key] = np.array(f[key])
-                logger.info(f"Loaded cache for {func_name} from {cache_file}")
-            except Exception as e:
-                logger.error(f"Failed to load cache: {e}")
-                cache = {}
+            with h5py.File(cache_file, "r") as f:
+                # If keys are specified, load only those
+                if keys:
+                    for key in keys:
+                        encoded_key = encode_key(key)
+                        if encoded_key in f:
+                            cache[key] = np.array(f[encoded_key])
+                else:
+                    for key in f.keys():
+                        decoded_key = decode_key(key)
+                        cache[decoded_key] = np.array(f[key])
+            logger.info(f"Loaded cache for {func_name} from {cache_file}")
 
         cache = dict(keys=cache.keys(), values=cache.values())
         result = func(*args, **kwargs, cache=cache, cache_file=cache_file)
@@ -115,22 +111,18 @@ def hd5_cache_kwargs_list_hash(func):
 
         if cache_file and os.path.isfile(cache_file):
             logger.info(f"Loading cache for {func_name} from {cache_file}")
-            try:
-                with h5py.File(cache_file, "r") as f:
-                    # If keys are specified, load only those
-                    if keys:
-                        for key in keys:
-                            encoded_key = encode_key(key)
-                            if encoded_key in f:
-                                cache[key] = np.array(f[encoded_key])
-                    else:
-                        for key in f.keys():
-                            decoded_key = decode_key(key)
-                            cache[decoded_key] = np.array(f[key])
-                logger.info(f"Loaded cache for {func_name} from {cache_file}")
-            except Exception as e:
-                logger.error(f"Failed to load cache: {e}")
-                cache = {}
+            with h5py.File(cache_file, "r") as f:
+                # If keys are specified, load only those
+                if keys:
+                    for key in keys:
+                        encoded_key = encode_key(key)
+                        if encoded_key in f:
+                            cache[key] = np.array(f[encoded_key])
+                else:
+                    for key in f.keys():
+                        decoded_key = decode_key(key)
+                        cache[decoded_key] = np.array(f[key])
+            logger.info(f"Loaded cache for {func_name} from {cache_file}")
 
         cache = dict(keys=cache.keys(), values=cache.values())
         result = func(*args, **kwargs, cache=cache, cache_file=cache_file)
