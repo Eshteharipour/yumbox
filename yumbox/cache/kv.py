@@ -1,9 +1,15 @@
+import functools
+import hashlib
+import json
 import os
 import uuid
 
 import lmdb
 import msgpack
+import numpy as np
 from lmdb import Environment
+
+from yumbox.config import BFG
 
 
 class LMDBMultiIndex:
@@ -286,3 +292,252 @@ class LMDB:
     def close(self):
         """Close the database."""
         self.env.close()
+
+
+class VectorLMDB:
+    def __init__(self, db_name: str, folder: str, map_size: int = 10 * 2**30):
+        """
+        Initialize LMDB database for numpy arrays.
+        :param db_name: Name of the database (e.g., "mydata").
+        :param folder: Folder where DB files will be stored.
+        :param map_size: Max size in bytes (default 10GB, adjust as needed).
+        """
+        self.folder = folder
+        os.makedirs(folder, exist_ok=True)
+        self.db_path = os.path.join(folder, db_name)
+        self.env: Environment = lmdb.open(self.db_path, map_size=map_size, lock=False)
+
+    def _serialize_array(self, arr: np.ndarray) -> bytes:
+        """Serialize numpy array to compressed bytes."""
+        import gzip
+        import io
+
+        buffer = io.BytesIO()
+        with gzip.GzipFile(fileobj=buffer, mode="wb") as f:
+            np.save(f, arr, allow_pickle=False)
+        return buffer.getvalue()
+
+    def _deserialize_array(self, data_bytes: bytes) -> np.ndarray:
+        """Deserialize bytes back to numpy array."""
+        import gzip
+        import io
+
+        buffer = io.BytesIO(data_bytes)
+        with gzip.GzipFile(fileobj=buffer, mode="rb") as f:
+            return np.load(f, allow_pickle=False)
+
+    def exists(self, key: str) -> bool:
+        """Check if a key exists."""
+        with self.env.begin() as txn:
+            key_bytes = key.encode()
+            return txn.get(key_bytes) is not None
+
+    def batch_exists(self, keys: list[str]) -> list[bool]:
+        """Check existence of multiple keys in batch."""
+        result = []
+        with self.env.begin() as txn:
+            for key in keys:
+                key_bytes = key.encode()
+                result.append(txn.get(key_bytes) is not None)
+        return result
+
+    def upsert(self, key: str, array: np.ndarray) -> bool:
+        """
+        Upsert a numpy array.
+        :return: True if it was written.
+        """
+        with self.env.begin(write=True) as txn:
+            key_bytes = key.encode()
+            serialized_data = self._serialize_array(array)
+            return txn.put(key_bytes, serialized_data)
+
+    def create(self, key: str, array: np.ndarray) -> bool:
+        """
+        Create a new entry.
+        :return: True if it was written or raises ValueError if already exists.
+        """
+        with self.env.begin(write=True) as txn:
+            key_bytes = key.encode()
+            if txn.get(key_bytes):
+                raise ValueError(f"Key {key} already exists")
+            serialized_data = self._serialize_array(array)
+            return txn.put(key_bytes, serialized_data)
+
+    def update(self, key: str, array: np.ndarray):
+        """Update the array for an existing key."""
+        with self.env.begin(write=True) as txn:
+            key_bytes = key.encode()
+            if not txn.get(key_bytes):
+                raise KeyError(f"Key {key} does not exist")
+            serialized_data = self._serialize_array(array)
+            txn.put(key_bytes, serialized_data)
+
+    def delete(self, key: str):
+        """Delete a key and its associated array."""
+        with self.env.begin(write=True) as txn:
+            key_bytes = key.encode()
+            if not txn.get(key_bytes):
+                raise KeyError(f"Key {key} does not exist")
+            txn.delete(key_bytes)
+
+    def get(self, key: str) -> np.ndarray:
+        """Get array by key."""
+        with self.env.begin() as txn:
+            key_bytes = key.encode()
+            data_bytes = txn.get(key_bytes)
+            if data_bytes is None:
+                raise KeyError(f"Key {key} does not exist")
+            return self._deserialize_array(data_bytes)
+
+    def get_info(self, key: str) -> dict[str, str | tuple]:
+        """
+        Get array metadata without loading the full array.
+        :param key: String key to inspect
+        :return: Dictionary with dtype, shape, and size info
+        :raises KeyError: if key does not exist
+        """
+        array = self.get(key)  # For now, we need to load it
+        return {
+            "dtype": str(array.dtype),
+            "shape": array.shape,
+            "size": array.size,
+            "nbytes": array.nbytes,
+        }
+
+    def list_keys(self) -> list[str]:
+        """Get all keys in the database."""
+        keys = []
+        with self.env.begin() as txn:
+            cursor = txn.cursor()
+            for key_bytes, _ in cursor:
+                keys.append(key_bytes.decode())
+        return keys
+
+    def get_dataset(self) -> dict[str, np.ndarray]:
+        """Export entire database to a dictionary."""
+        records = {}
+        with self.env.begin() as txn:
+            cursor = txn.cursor()
+            for key_bytes, data_bytes in cursor:
+                key = key_bytes.decode()
+                array = self._deserialize_array(data_bytes)
+                records[key] = array
+        return records
+
+    def close(self):
+        """Close the database."""
+        self.env.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
+def lmdb_cache(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+        cache_db_path = os.path.join(cache_dir, func_name) if cache_dir else None
+
+        cache = {}
+        keys = kwargs.get("keys", [])
+        keys = list(keys)
+
+        if cache_db_path and os.path.exists(cache_db_path):
+            logger.info(f"Loading cache for {func_name} from {cache_db_path}")
+            with VectorLMDB(func_name, cache_dir) as db:
+                # If keys are specified, load only those
+                if keys:
+                    for key in keys:
+                        key_str = str(key)
+                        if db.exists(key_str):
+                            cache[key] = db.get(key_str)
+                else:
+                    # Load all keys
+                    cache = db.get_dataset()
+            logger.info(f"Loaded cache for {func_name} from {cache_db_path}")
+
+        cache = dict(keys=cache.keys(), values=cache.values())
+        result = func(*args, **kwargs, cache=cache, cache_file=cache_db_path)
+
+        if cache_db_path:
+            logger.info(f"Saving cache for {func_name} to {cache_db_path}")
+            try:
+                with VectorLMDB(func_name, cache_dir) as db:
+                    for key, value in result.items():
+                        key_str = str(key)
+                        db.upsert(key_str, value)
+                logger.info(f"Saved cache for {func_name} to {cache_db_path}")
+            except Exception as e:
+                logger.error(f"Failed to save cache: {e}")
+
+        return result
+
+    return wrapper
+
+
+def lmdb_cache_kwargs_list_hash(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cache_dir = BFG["cache_dir"]
+        logger = BFG["logger"]
+
+        func_name = func.__name__
+
+        if "cache_kwargs" not in kwargs or not kwargs["cache_kwargs"]:
+            logger.warning(
+                f"Skipped loading cache because kwargs was empty for {func_name}"
+            )
+            return func(*args, **kwargs, cache=None, cache_file=None)
+
+        cache_dict = {}
+        for c in kwargs["cache_kwargs"]:
+            cache_dict[c] = kwargs[c]
+
+        func_kwargs_hash = hashlib.md5(
+            json.dumps(cache_dict, sort_keys=True, default=str).encode()
+        ).hexdigest()
+
+        db_name = f"{func_name}_{func_kwargs_hash}"
+        cache_db_path = os.path.join(cache_dir, db_name) if cache_dir else None
+
+        cache = {}
+        keys = kwargs.get("keys", [])
+        keys = list(keys)
+
+        if cache_db_path and os.path.exists(cache_db_path):
+            logger.info(f"Loading cache for {func_name} from {cache_db_path}")
+            with VectorLMDB(db_name, cache_dir) as db:
+                # If keys are specified, load only those
+                if keys:
+                    for key in keys:
+                        key_str = str(key)
+                        if db.exists(key_str):
+                            cache[key] = db.get(key_str)
+                else:
+                    # Load all keys
+                    cache = db.get_dataset()
+            logger.info(f"Loaded cache for {func_name} from {cache_db_path}")
+
+        cache = dict(keys=cache.keys(), values=cache.values())
+        result = func(*args, **kwargs, cache=cache, cache_file=cache_db_path)
+
+        if cache_db_path:
+            logger.info(f"Saving cache for {func_name} to {cache_db_path}")
+            try:
+                with VectorLMDB(db_name, cache_dir) as db:
+                    for key, value in result.items():
+                        key_str = str(key)
+                        db.upsert(key_str, value)
+                logger.info(f"Saved cache for {func_name} to {cache_db_path}")
+            except Exception as e:
+                logger.error(f"Failed to save cache: {e}")
+
+        return result
+
+    return wrapper
