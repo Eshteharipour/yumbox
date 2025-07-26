@@ -1,6 +1,6 @@
 [project]
 name = "yumbox"
-version = "0.0.2"
+version = "0.0.3"
 description = "Tools and utilities for fast prototyping of machine learning ideas!"
 readme = "README.md"
 requires-python = ">=3.11"
