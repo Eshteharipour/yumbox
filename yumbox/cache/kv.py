@@ -434,6 +434,48 @@ class VectorLMDB:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
+    def bulk_upsert(self, data: dict[str, np.ndarray]) -> int:
+        """
+        Bulk upsert multiple numpy arrays.
+        :param data: Dictionary of {key: array} pairs to insert
+        :return: Number of items successfully inserted
+        """
+        # Pre-serialize all data outside the transaction
+        serialized_items = []
+        for key, array in data.items():
+            key_bytes = key.encode()
+            serialized_data = self._serialize_array(array)
+            serialized_items.append((key_bytes, serialized_data))
+
+        # Bulk insert using putmulti
+        with self.env.begin(write=True) as txn:
+            cursor = txn.cursor()
+            consumed, added = cursor.putmulti(serialized_items)
+            return added
+
+    def bulk_upsert_from_lists(self, keys: list[str], arrays: list[np.ndarray]) -> int:
+        """
+        Bulk upsert from separate key and array lists.
+        :param keys: List of string keys
+        :param arrays: List of numpy arrays (must match keys length)
+        :return: Number of items successfully inserted
+        """
+        if len(keys) != len(arrays):
+            raise ValueError("Keys and arrays lists must have same length")
+
+        # Pre-serialize all data
+        serialized_items = []
+        for key, array in zip(keys, arrays):
+            key_bytes = key.encode()
+            serialized_data = self._serialize_array(array)
+            serialized_items.append((key_bytes, serialized_data))
+
+        # Bulk insert
+        with self.env.begin(write=True) as txn:
+            cursor = txn.cursor()
+            consumed, added = cursor.putmulti(serialized_items)
+            return added
+
 
 def lmdb_cache(func):
     @functools.wraps(func)
@@ -454,9 +496,8 @@ def lmdb_cache(func):
                 # If keys are specified, load only those
                 if keys:
                     for key in keys:
-                        key_str = str(key)
-                        if db.exists(key_str):
-                            cache[key] = db.get(key_str)
+                        if db.exists(key):
+                            cache[key] = db.get(key)
                 else:
                     # Load all keys
                     cache = db.get_dataset()
@@ -469,9 +510,7 @@ def lmdb_cache(func):
             logger.info(f"Saving cache for {func_name} to {cache_db_path}")
             try:
                 with VectorLMDB(func_name, cache_dir) as db:
-                    for key, value in result.items():
-                        key_str = str(key)
-                        db.upsert(key_str, value)
+                    db.bulk_upsert(result)
                 logger.info(f"Saved cache for {func_name} to {cache_db_path}")
             except Exception as e:
                 logger.error(f"Failed to save cache: {e}")
@@ -516,9 +555,8 @@ def lmdb_cache_kwargs_list_hash(func):
                 # If keys are specified, load only those
                 if keys:
                     for key in keys:
-                        key_str = str(key)
-                        if db.exists(key_str):
-                            cache[key] = db.get(key_str)
+                        if db.exists(key):
+                            cache[key] = db.get(key)
                 else:
                     # Load all keys
                     cache = db.get_dataset()
@@ -531,9 +569,7 @@ def lmdb_cache_kwargs_list_hash(func):
             logger.info(f"Saving cache for {func_name} to {cache_db_path}")
             try:
                 with VectorLMDB(db_name, cache_dir) as db:
-                    for key, value in result.items():
-                        key_str = str(key)
-                        db.upsert(key_str, value)
+                    db.bulk_upsert(result)
                 logger.info(f"Saved cache for {func_name} to {cache_db_path}")
             except Exception as e:
                 logger.error(f"Failed to save cache: {e}")
