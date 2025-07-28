@@ -10,7 +10,7 @@ dependencies = [
     "numpy",
     "torch",
     "faiss-cpu",
-    "hazm",
+    "hazm>=0.9.3",
     "nltk>=3.8",
     "unicodeblock",
     "lxml",
