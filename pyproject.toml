@@ -11,7 +11,7 @@ dependencies = [
     "torch",
     "faiss-cpu",
     "hazm",
-    "nltk",
+    "nltk>=3.8",
     "unicodeblock",
     "lxml",
     "parsel",
