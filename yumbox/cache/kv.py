@@ -527,6 +527,12 @@ def lmdb_cache(func):
                 db.bulk_upsert(result)
             logger.info(f"Saved cache for {func_name} to {cache_db_path}")
 
+        # Debugging
+        with VectorLMDB(func_name, cache_dir) as db:
+            for key in keys:
+                if not db.exists(key):
+                    raise ValueError(f"Key: {key} does not exist.")
+
         return result
 
     return wrapper
@@ -582,6 +588,12 @@ def lmdb_cache_kwargs_list_hash(func):
             with VectorLMDB(db_name, cache_dir) as db:
                 db.bulk_upsert(result)
             logger.info(f"Saved cache for {func_name} to {cache_db_path}")
+
+        # Debugging
+        with VectorLMDB(db_name, cache_dir) as db:
+            for key in keys:
+                if not db.exists(key):
+                    raise ValueError(f"Key: {key} does not exist.")
 
         return result
 
