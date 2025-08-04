@@ -582,12 +582,10 @@ def lmdb_cache_kwargs_list_hash(func):
 
         if cache_db_path:
             logger.info(f"Saving cache for {func_name} to {cache_db_path}")
-            try:
-                with VectorLMDB(db_name, cache_dir) as db:
-                    db.bulk_upsert(result)
-                logger.info(f"Saved cache for {func_name} to {cache_db_path}")
-            except Exception as e:
-                logger.error(f"Failed to save cache: {e}")
+            with VectorLMDB(db_name, cache_dir) as db:
+                for key, val in result.items():
+                    db.upsert(key, val)
+            logger.info(f"Saved cache for {func_name} to {cache_db_path}")
 
         return result
 
