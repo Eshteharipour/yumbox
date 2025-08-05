@@ -295,7 +295,7 @@ class LMDB:
 
 
 class VectorLMDB:
-    def __init__(self, db_name: str, folder: str, map_size: int = 10 * 2**30):
+    def __init__(self, db_name: str, folder: str, map_size: int = 30 * 2**30):
         """
         Initialize LMDB database for numpy arrays.
         :param db_name: Name of the database (e.g., "mydata").
