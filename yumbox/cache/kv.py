@@ -503,7 +503,7 @@ def lmdb_cache(func):
 
         cache = {}
         keys = kwargs.get("keys", [])
-        keys = list(keys)
+        keys = set(keys)
 
         if cache_db_path and os.path.exists(cache_db_path):
             logger.info(f"Loading cache for {func_name} from {cache_db_path}")
@@ -519,15 +519,15 @@ def lmdb_cache(func):
             logger.info(f"Loaded cache for {func_name} from {cache_db_path}")
 
         cache = dict(keys=cache.keys(), values=cache.values())
-        result = func(*args, **kwargs, cache=cache, cache_file=cache_db_path)
+        cache = func(*args, **kwargs, cache=cache, cache_file=cache_db_path)
 
         if cache_db_path:
             logger.info(f"Saving cache for {func_name} to {cache_db_path}")
             with VectorLMDB(func_name, cache_dir) as db:
-                db.bulk_upsert(result)
+                db.bulk_upsert(cache)
             logger.info(f"Saved cache for {func_name} to {cache_db_path}")
 
-        return result
+        return cache
 
     return wrapper
 
@@ -559,7 +559,7 @@ def lmdb_cache_kwargs_list_hash(func):
 
         cache = {}
         keys = kwargs.get("keys", [])
-        keys = list(keys)
+        keys = set(keys)
 
         if cache_db_path and os.path.exists(cache_db_path):
             logger.info(f"Loading cache for {func_name} from {cache_db_path}")
@@ -575,14 +575,18 @@ def lmdb_cache_kwargs_list_hash(func):
             logger.info(f"Loaded cache for {func_name} from {cache_db_path}")
 
         cache = dict(keys=cache.keys(), values=cache.values())
-        result = func(*args, **kwargs, cache=cache, cache_file=cache_db_path)
+        cache = func(*args, **kwargs, cache=cache, cache_file=cache_db_path)
 
         if cache_db_path:
             logger.info(f"Saving cache for {func_name} to {cache_db_path}")
             with VectorLMDB(db_name, cache_dir) as db:
-                db.bulk_upsert(result)
+                db.bulk_upsert(cache)
             logger.info(f"Saved cache for {func_name} to {cache_db_path}")
 
-        return result
+        for key in keys:
+            if key not in cache:
+                raise ValueError(f"*Dataset ERROR: key {key} not in results.")
+
+        return cache
 
     return wrapper
