@@ -13,13 +13,6 @@ from yumbox.config import BFG
 
 from .fs import *
 from .hdf import hd5_cache, hd5_cache_kwargs_list_hash
-from .kv import (
-    LMDB,
-    LMDBMultiIndex,
-    VectorLMDB,
-    lmdb_cache,
-    lmdb_cache_kwargs_list_hash,
-)
 
 # TODO: fix safe_save_kw keys= values=
 
