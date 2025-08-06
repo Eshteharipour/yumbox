@@ -21,6 +21,7 @@ dependencies = [
     "lmdb",
     "msgpack",
     "h5py",
+    "redis>=4.0.0",
 ]
 
 [project.optional-dependencies]
